@@ -1,10 +1,12 @@
 // @description OptiLab Core
-// @version 1.0
+// @version 1.0.1
 // @author LanesAudio
 // @about
 //   OptiLab Core is a JSFX audio processor for REAPER.
 //   It brings leveling, density, tone control, saturation, and limiting together.
 // @changelog
+//   v1.0.1
+//   - Fixed Input Drive resetting to the mode default on play/stop/render/reinit.
 //   v1.0
 //   - Initial release
 // @link
@@ -13,7 +15,7 @@
 // @provides
 //   optilab_core.jsfx
 
-desc:OptiLab Core v1.0 (LanesAudio)
+desc:OptiLab Core v1.0.1 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream Polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
@@ -424,9 +426,14 @@ auto_adapt_pct = clamp(auto_adapt_pct, 0, 100);
 input_drive_db = clamp(input_drive_db, -12, 18);
 
 core_default_input_db = core_mode == 0 ? 3.5 : core_mode == 1 ? 4.5 : 0;
-core_mode_changed = core_initial_apply || core_mode != core_last_mode;
+// Only force the recommended Input Drive when the user actually changes Mode.
+// Do not treat first @slider after load/reinit/play/render as a mode change,
+// because that overwrites saved/manual Input Drive settings.
+core_mode_changed = (core_last_mode >= 0) && (core_mode != core_last_mode);
 
-core_mode_changed ? (
+core_last_mode < 0 ? (
+  core_last_mode = core_mode;
+) : core_mode_changed ? (
   input_drive_db = core_default_input_db;
   sliderchange(2);
   core_state_reset = 1;
