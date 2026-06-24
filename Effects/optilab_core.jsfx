@@ -1,21 +1,24 @@
 // @description OptiLab Core
-// @version 1.0.1
+// @version 1.0.2
 // @author LanesAudio
 // @about
 //   OptiLab Core is a JSFX audio processor for REAPER.
 //   It brings leveling, density, tone control, saturation, and limiting together.
 // @changelog
+//   v1.0.2
+//   - Updated Podcast, Stream, and Smooth Limiter mode ceilings to use the full -0.1 dBFS target.
+//   - Small CPU hygiene: cached multiband clip DC scalars and removed unused output-gain work.
 //   v1.0.1
 //   - Fixed Input Drive resetting to the mode default on play/stop/render/reinit.
 //   v1.0
 //   - Initial release
 // @link
 //   Donations: https://paypal.me/dgl1984
-//   Website/Contact: info@lanesaudio.com
+//   Contact: info@lanesaudio.com
 // @provides
 //   optilab_core.jsfx
 
-desc:OptiLab Core v1.0.1 (LanesAudio)
+desc:OptiLab Core v1.0.2 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream Polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
@@ -485,7 +488,7 @@ core_mode == 0 ? (
   lookahead_ms = 0.36;
   final_threshold_db = 0;
   final_threshold_makeup_pct = 0;
-  clip_ceiling_db = -1;
+  clip_ceiling_db = -0.1;
   top_filter_mode = 2;
   output_trim_db = 0;
   smooth_drive_rounder_pct = 0;
@@ -508,7 +511,7 @@ core_mode == 0 ? (
   clipper_style = 2;
   pre_limiter_pct = 44;
   clip_restraint_pct = 26;
-  clip_ceiling_db = -1.2;
+  clip_ceiling_db = -0.1;
   final_threshold_db = 0;
   final_threshold_makeup_pct = 0;
   stereo_mode = 0;
@@ -584,7 +587,7 @@ core_mode == 0 ? (
   lookahead_ms = 0.73;
   final_threshold_db = -2;
   final_threshold_makeup_pct = 100;
-  clip_ceiling_db = 0;
+  clip_ceiling_db = -0.1;
   top_filter_mode = 0;
   output_trim_db = 0;
   smooth_drive_rounder_pct = 50;
@@ -624,6 +627,7 @@ core_mode == 0 ? (
   lookahead_ms = lookahead_ms + (lookahead_ms - lookahead_ms) * core_auto_down;
   final_threshold_db = 0 + (0 - 0) * core_auto_down + (-0.6 - 0) * core_auto_up;
   final_threshold_makeup_pct = 0 + (0 - 0) * core_auto_down + (35 - 0) * core_auto_up;
+  clip_ceiling_db = -0.1;
 );
 
 core_mode == 1 ? (
@@ -654,7 +658,7 @@ core_mode == 1 ? (
   lookahead_ms = 0.54 + (0.54 - 0.54) * core_auto_down + (1.5 - 0.54) * core_auto_up;
   final_threshold_db = 0 + (0 - 0) * core_auto_down + (-1.0 - 0) * core_auto_up;
   final_threshold_makeup_pct = 0 + (0 - 0) * core_auto_down + (100 - 0) * core_auto_up;
-  clip_ceiling_db = -1.2 + (-1.2 + 1.2) * core_auto_down + (-0.1 + 1.2) * core_auto_up;
+  clip_ceiling_db = -0.1;
   smooth_drive_rounder_pct = 0 + (0 - 0) * core_auto_down + (20 - 0) * core_auto_up;
   clipper_style = core_auto_up > 0 ? 0 : 2;
 );
@@ -669,7 +673,7 @@ core_mode == 2 ? (
   lookahead_ms = 0.73 + (0.73 - 0.73) * core_auto_down + (1.5 - 0.73) * core_auto_up;
   final_threshold_db = -2 + (-2 + 2) * core_auto_down + (-3.0 + 2) * core_auto_up;
   final_threshold_makeup_pct = 100 + (100 - 100) * core_auto_down + (100 - 100) * core_auto_up;
-  clip_ceiling_db = 0 + (0 - 0) * core_auto_down + (-0.1 - 0) * core_auto_up;
+  clip_ceiling_db = -0.1;
   smooth_drive_rounder_pct = 50 + (30 - 50) * core_auto_down + (65 - 50) * core_auto_up;
 );
 
@@ -695,7 +699,6 @@ final_threshold_makeup_pct = clamp(final_threshold_makeup_pct, 0, 100);
 
 final_threshold_drive_target = db2lin(-final_threshold_db);
 final_threshold_makeup = final_threshold_makeup_pct * 0.01;
-output_gain = db2lin(min(output_trim_db, 0));
 smooth_drive_rounder_amt = clamp(smooth_drive_rounder_pct, 0, 100) * 0.01;
 post_agc_smooth_drive_amt = clamp(post_agc_smooth_drive_pct, 0, 25) * 0.01;
 post_xt2_smooth_drive_amt = clamp(post_xt2_smooth_drive_pct, 0, 50) * 0.01;
@@ -706,6 +709,10 @@ pre_final_drive_gain = db2lin(clamp(pre_final_drive_db, -12, 12));
 
 mb_clip_mix = mb_clip_pct * 0.01;
 dc_cancel = dc_cancel_pct * 0.01;
+dc3_amt = dc_cancel * 0.35;
+dc4_amt = dc_cancel * 0.55;
+dc5_amt = dc_cancel * 0.78;
+dc6_amt = dc_cancel * 0.92;
 overshoot_amt = overshoot_pct * 0.01;
 recomb_control = recomb_control_pct * 0.01;
 crossover_model = floor(clamp(crossover_model, 0, 3) + 0.5);
@@ -1468,11 +1475,6 @@ g2 = g2 * (1 - low_coherence) + low_shared_gain * low_coherence;
 g6 = g5;
 
 mb_clip_mix > 0 ? (
-  dc3_amt = dc_cancel * 0.35;
-  dc4_amt = dc_cancel * 0.55;
-  dc5_amt = dc_cancel * 0.78;
-  dc6_amt = dc_cancel * 0.92;
-
   b3_l = mb_clip3_l.mb_soft_clip_dc(b3_l, mb_work_ref * 0.56, mb_clip_mix * 0.55, 0.42, dc3_amt, dist_cancel_a);
   b3_r = mb_clip3_r.mb_soft_clip_dc(b3_r, mb_work_ref * 0.56, mb_clip_mix * 0.55, 0.42, dc3_amt, dist_cancel_a);
   b4_l = mb_clip4_l.mb_soft_clip_dc(b4_l, mb_work_ref * 0.48, mb_clip_mix * 0.75, 0.36, dc4_amt, dist_cancel_a);
@@ -1725,9 +1727,6 @@ top_filter_mode == 1 ? (
 
 l *= final_threshold_makeup_cancel;
 r *= final_threshold_makeup_cancel;
-
-l *= output_gain;
-r *= output_gain;
 
 smooth_drive_rounder_amt > 0.0000001 ? (
   l = final_round_l.smooth_drive_rounder(l, smooth_drive_rounder_amt);
