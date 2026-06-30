@@ -1,11 +1,11 @@
 // @description OptiLab Core
-// @version 1.0.2
+// @version 1.0.3
 // @author LanesAudio
 // @about
 //   OptiLab Core is a JSFX audio processor for REAPER.
 //   It brings leveling, density, tone control, saturation, and limiting together.
 // @changelog
-//   v1.0.2
+//   v1.0.3
 //   - Refined Auto-Adapt behavior in Podcast Leveler and Stream polish.
 //   - Improved handling of spoken-word material with pauses between phrases.
 //   - Reduced chunky, recorder-like auto-gain artifacts on difficult speech.
@@ -24,7 +24,7 @@
 // @provides
 //   optilab_core.jsfx
 
-desc:OptiLab Core v1.0.2 (LanesAudio)
+desc:OptiLab Core v1.0.3 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
