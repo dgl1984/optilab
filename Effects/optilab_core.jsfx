@@ -6,8 +6,14 @@
 //   It brings leveling, density, tone control, saturation, and limiting together.
 // @changelog
 //   v1.0.2
-//   - Updated Podcast, Stream, and Smooth Limiter mode ceilings to use the full -0.1 dBFS target.
-//   - Small CPU hygiene: cached multiband clip DC scalars and removed unused output-gain work.
+//   - Refined Auto-Adapt behavior in Podcast Leveler and Stream polish.
+//   - Improved handling of spoken-word material with pauses between phrases.
+//   - Reduced chunky, recorder-like auto-gain artifacts on difficult speech.
+//   - Improved high Auto-Adapt behavior in Podcast Leveler so it stays controlled and less clip-driven.
+//   - Kept Stream polish familiar at low Auto-Adapt settings while making higher settings smoother and more stable.
+//   - Retired older startup peak-catch behavior for cleaner level transitions.
+//   - Updated Stream polish wording for better screen-reader and TTS pronunciation.
+//   - Kept the simple three-control Core interface.
 //   v1.0.1
 //   - Fixed Input Drive resetting to the mode default on play/stop/render/reinit.
 //   v1.0
@@ -20,9 +26,9 @@
 
 desc:OptiLab Core v1.0.2 (LanesAudio)
 
-slider1:core_mode=0<0,2,1{Podcast Leveler,Stream Polish,Smooth Limiter}>Mode
+slider1:core_mode=0<0,2,1{Podcast Leveler,Stream polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
-slider3:auto_adapt_pct=50<0,100,1>Auto-Adapt percent
+slider3:auto_adapt_pct=0<0,100,1>Auto-Adapt percent
 in_pin:left input
 in_pin:right input
 out_pin:left output
@@ -38,6 +44,20 @@ agc_lgain = 1;
 agc_hgain = 1;
 final_threshold_drive_s = 1;
 
+gui_peak_in_l_sample = 0;
+gui_peak_in_r_sample = 0;
+gui_peak_out_l_sample = 0;
+gui_peak_out_r_sample = 0;
+gui_peak_in_l = 0;
+gui_peak_in_r = 0;
+gui_peak_out_l = 0;
+gui_peak_out_r = 0;
+gui_peak_hold_in = 20000;
+gui_peak_hold_out = 20001;
+20000[] = -60;
+20001[] = -60;
+gui_active_slider = -1;
+gui_last_mouse_down = 0;
 
 fcs_buf_len = 512;
 fcs_buf_l = 0;
@@ -66,12 +86,12 @@ master_startup_age = 0;
 
 function db2lin(db)
 (
-  10^(db/20);
+  exp(db * 0.11512925464970229);
 );
 
 function lin2db(x)
 (
-  20 * log(max(x, 0.0000001)) / log(10);
+  log(max(x, 0.0000001)) * 8.6858896380650366;
 );
 
 function clamp(x lo hi)
@@ -392,7 +412,7 @@ function biquad_lp_set(freq q) instance(a0 a1 a2 b1 b2) local(w0 cw sw alpha nor
 function biquad_peak_set(freq q gain_db) instance(a0 a1 a2 b1 b2) local(A w0 cw sw alpha b0 bb1 bb2 aa0 aa1 aa2 norm)
 (
   freq = clamp(freq, 20, srate * 0.45);
-  A = 10^(gain_db/40);
+  A = exp(gain_db * 0.057564627324851);
   w0 = 2*$pi*freq/srate;
   cw = cos(w0);
   sw = sin(w0);
@@ -450,10 +470,10 @@ core_mode == 0 ? (
   agc_drive_db = 0.5;
   release_time = 7;
   pd_release_pct = 70;
-  gate_threshold_db = -30;
+  gate_threshold_db = -20;
   gate_reopen_speed_ms = 40;
   gate_reopen_strength_pct = 65;
-  first_hit_catch_pct = 35;
+  first_hit_catch_pct = 0;
   post_agc_smooth_drive_pct = 25;
   bass_coupling_pct = 70;
   bass_eq_db = 2;
@@ -465,33 +485,33 @@ core_mode == 0 ? (
   adaptive_bass_coupling_pct = 12;
   bass_clip_pct = 8;
   bass_clip_density_pct = 0;
-  density_db = 1;
+  density_db = 0;
   xt2_amount_pct = 100;
   presence_db = 2;
   brilliance_db = 2;
-  adaptive_top_coupling_pct = 35;
+  adaptive_top_coupling_pct = 50;
   crossover_model = 2;
   mb_clip_pct = 0;
   clip_drive_db = 0;
   recomb_control_pct = 0;
   dc_cancel_pct = 65;
-  upper_snubber_pct = 78;
+  upper_snubber_pct = 0;
   snubber_lookahead_ms = 1.5;
-  post_xt2_smooth_drive_pct = 12;
+  post_xt2_smooth_drive_pct = 10;
   stereo_mode = 0;
   stereo_width_pct = 100;
-  pre_final_drive_db = 0;
+  pre_final_drive_db = -1.5;
   clipper_style = 0;
   pre_limiter_pct = 100;
   clip_restraint_pct = 100;
-  overshoot_pct = 50;
+  overshoot_pct = 100;
   lookahead_ms = 0.36;
-  final_threshold_db = 0;
-  final_threshold_makeup_pct = 0;
+  final_threshold_db = -1.5;
+  final_threshold_makeup_pct = 100;
   clip_ceiling_db = -0.1;
   top_filter_mode = 2;
   output_trim_db = 0;
-  smooth_drive_rounder_pct = 0;
+  smooth_drive_rounder_pct = 58;
 ) : core_mode == 1 ? (
   input_trim_db = 4.5;
   phase_rotate_pct = 4;
@@ -499,7 +519,7 @@ core_mode == 0 ? (
   agc_drive_db = 0.2;
   bass_coupling_pct = 60;
   release_time = 6.1;
-  gate_threshold_db = -30;
+  gate_threshold_db = -25;
   gate_reopen_speed_ms = 50;
   gate_reopen_strength_pct = 55;
   density_db = 4.7;
@@ -537,7 +557,7 @@ core_mode == 0 ? (
   bass_clip_density_pct = 6;
   upper_snubber_pct = 42;
   snubber_lookahead_ms = 0.73;
-  first_hit_catch_pct = 42;
+  first_hit_catch_pct = 0;
   post_agc_smooth_drive_pct = 14;
   post_xt2_smooth_drive_pct = 20;
   pre_final_drive_db = 0;
@@ -600,67 +620,74 @@ core_initial_apply = 0;
 
 input_trim_db = clamp(input_drive_db, -12, 18);
 
-core_auto_down = clamp((45 - auto_adapt_pct) / 45, 0, 1);
-core_auto_up = clamp((auto_adapt_pct - 55) / 45, 0, 1);
+// Auto-Adapt is now a normal percent control:
+// 0 percent = exact neutral mode, 100 percent = stronger adapted side.
+core_auto_down = 0;
+core_auto_up = clamp(auto_adapt_pct * 0.01, 0, 1);
 
 core_mode == 0 ? (
-  agc_amount_pct = 65 + (52 - 65) * core_auto_down + (85 - 65) * core_auto_up;
-  agc_drive_db = 0.5 + (-0.8 - 0.5) * core_auto_down + (2.0 - 0.5) * core_auto_up;
-  release_time = 7 + (8 - 7) * core_auto_down + (5.6 - 7) * core_auto_up;
-  pd_release_pct = 70 + (65 - 70) * core_auto_down + (88 - 70) * core_auto_up;
-  gate_threshold_db = -30 + (-30 + 30) * core_auto_down + (-34 + 30) * core_auto_up;
-  gate_reopen_speed_ms = 40 + (55 - 40) * core_auto_down + (28 - 40) * core_auto_up;
-  gate_reopen_strength_pct = 65 + (55 - 65) * core_auto_down + (88 - 65) * core_auto_up;
-  first_hit_catch_pct = 35 + (35 - 35) * core_auto_down + (70 - 35) * core_auto_up;
-  post_agc_smooth_drive_pct = 25 + (14 - 25) * core_auto_down + (25 - 25) * core_auto_up;
-  bass_coupling_pct = 70 + (60 - 70) * core_auto_down + (70 - 70) * core_auto_up;
-  bass_sc_relief_pct = 35 + (35 - 35) * core_auto_down + (58 - 35) * core_auto_up;
-  low_coherence_pct = 65 + (58 - 65) * core_auto_down + (65 - 65) * core_auto_up;
-  low_release_stab_pct = 70 + (65 - 70) * core_auto_down + (82 - 70) * core_auto_up;
-  adaptive_bass_coupling_pct = 12 + (12 - 12) * core_auto_down + (24 - 12) * core_auto_up;
-  density_db = 1 + (0.2 - 1) * core_auto_down + (1.6 - 1) * core_auto_up;
-  adaptive_top_coupling_pct = 35 + (35 - 35) * core_auto_down + (58 - 35) * core_auto_up;
-  post_xt2_smooth_drive_pct = 12 + (8 - 12) * core_auto_down + (22 - 12) * core_auto_up;
-  pre_final_drive_db = 0 + (0 - 0) * core_auto_down + (-1.0 - 0) * core_auto_up;
-  clip_drive_db = 0 + (0 - 0) * core_auto_down + (-0.6 - 0) * core_auto_up;
-  overshoot_pct = 50 + (50 - 50) * core_auto_down + (75 - 50) * core_auto_up;
-  lookahead_ms = lookahead_ms + (lookahead_ms - lookahead_ms) * core_auto_down;
-  final_threshold_db = 0 + (0 - 0) * core_auto_down + (-0.6 - 0) * core_auto_up;
-  final_threshold_makeup_pct = 0 + (0 - 0) * core_auto_down + (35 - 0) * core_auto_up;
+  // Podcast Adapt 0 stays at the established Core Podcast sound.
+  // Higher Adapt now means more leveling/protection, not more drive into clipping.
+  agc_amount_pct = 65 + (85 - 65) * core_auto_up;
+  agc_drive_db = 0.5 + (0.0 - 0.5) * core_auto_up;
+  release_time = 7 + (5.2 - 7) * (core_auto_up * core_auto_up);
+  pd_release_pct = 70 + (84 - 70) * core_auto_up;
+  gate_threshold_db = -20;
+  gate_reopen_speed_ms = 40 + (36 - 40) * core_auto_up;
+  gate_reopen_strength_pct = 65 + (60 - 65) * (core_auto_up * core_auto_up);
+  first_hit_catch_pct = 0;
+  post_agc_smooth_drive_pct = 25;
+  bass_coupling_pct = 70;
+  bass_sc_relief_pct = 35 + (56 - 35) * core_auto_up;
+  low_coherence_pct = 65;
+  low_release_stab_pct = 70 + (82 - 70) * core_auto_up;
+  adaptive_bass_coupling_pct = 12 + (22 - 12) * core_auto_up;
+  density_db = 0;
+  adaptive_top_coupling_pct = 50 + (72 - 50) * core_auto_up;
+  post_xt2_smooth_drive_pct = 10 + (12 - 10) * core_auto_up;
+  pre_final_drive_db = -1.5;
+  clip_drive_db = 0 + (-0.7 - 0) * core_auto_up;
+  overshoot_pct = 100;
+  lookahead_ms = lookahead_ms;
+  final_threshold_db = -1.5;
+  final_threshold_makeup_pct = 100;
   clip_ceiling_db = -0.1;
 );
 
 core_mode == 1 ? (
-  agc_amount_pct = 56 + (50 - 56) * core_auto_down + (75 - 56) * core_auto_up;
-  agc_drive_db = 0.2 + (-1.5 - 0.2) * core_auto_down + (0 - 0.2) * core_auto_up;
-  release_time = 6.1 + (7.2 - 6.1) * core_auto_down + (6 - 6.1) * core_auto_up;
-  pd_release_pct = 78 + (70 - 78) * core_auto_down + (70 - 78) * core_auto_up;
-  gate_threshold_db = -30 + (-30 + 30) * core_auto_down + (-20 + 30) * core_auto_up;
-  gate_reopen_speed_ms = 50 + (60 - 50) * core_auto_down + (50 - 50) * core_auto_up;
-  gate_reopen_strength_pct = 55 + (45 - 55) * core_auto_down + (0 - 55) * core_auto_up;
-  first_hit_catch_pct = 42 + (50 - 42) * core_auto_down + (100 - 42) * core_auto_up;
-  post_agc_smooth_drive_pct = 14 + (10 - 14) * core_auto_down + (25 - 14) * core_auto_up;
-  bass_coupling_pct = 60 + (70 - 60) * core_auto_down + (50 - 60) * core_auto_up;
-  bass_eq_db = 3.6 + (2.4 - 3.6) * core_auto_down + (3.0 - 3.6) * core_auto_up;
-  bass_sc_relief_pct = 76 + (76 - 76) * core_auto_down + (50 - 76) * core_auto_up;
-  low_bass_floor_pct = 42 + (35 - 42) * core_auto_down + (0 - 42) * core_auto_up;
-  low_coherence_pct = 82 + (75 - 82) * core_auto_down + (0 - 82) * core_auto_up;
-  low_release_stab_pct = 74 + (74 - 74) * core_auto_down + (60 - 74) * core_auto_up;
-  adaptive_bass_coupling_pct = 65 + (65 - 65) * core_auto_down + (100 - 65) * core_auto_up;
-  density_db = 4.7 + (2.8 - 4.7) * core_auto_down + (5.0 - 4.7) * core_auto_up;
-  presence_db = 2.3 + (2.0 - 2.3) * core_auto_down + (1.4 - 2.3) * core_auto_up;
-  brilliance_db = 3.2 + (3.0 - 3.2) * core_auto_down + (1.4 - 3.2) * core_auto_up;
-  adaptive_top_coupling_pct = 25 + (25 - 25) * core_auto_down + (50 - 25) * core_auto_up;
-  post_xt2_smooth_drive_pct = 20 + (15 - 20) * core_auto_down + (35 - 20) * core_auto_up;
-  pre_final_drive_db = 0 + (0 - 0) * core_auto_down + (-2.5 - 0) * core_auto_up;
-  clip_drive_db = -0.8 + (-1.0 + 0.8) * core_auto_down + (-1.5 + 0.8) * core_auto_up;
-  overshoot_pct = 72 + (72 - 72) * core_auto_down + (100 - 72) * core_auto_up;
-  lookahead_ms = 0.54 + (0.54 - 0.54) * core_auto_down + (1.5 - 0.54) * core_auto_up;
-  final_threshold_db = 0 + (0 - 0) * core_auto_down + (-1.0 - 0) * core_auto_up;
-  final_threshold_makeup_pct = 0 + (0 - 0) * core_auto_down + (100 - 0) * core_auto_up;
+  // Stream Adapt 0 stays anchored to the established Stream polish sound.
+  // Higher Adapt stabilizes mixed program material without turning Stream into a louder/slammed preset.
+  agc_amount_pct = 56 + (72 - 56) * core_auto_up;
+  agc_drive_db = 0.2 + (0 - 0.2) * core_auto_up;
+  release_time = 6.1 + (6.0 - 6.1) * core_auto_up;
+  pd_release_pct = 78 + (72 - 78) * core_auto_up;
+  gate_threshold_db = -30 + 5 * core_auto_up;
+  gate_reopen_speed_ms = 50;
+  gate_reopen_strength_pct = 55 + (35 - 55) * core_auto_up;
+  first_hit_catch_pct = 0;
+  post_agc_smooth_drive_pct = 14 + (18 - 14) * core_auto_up;
+  bass_coupling_pct = 60 + (54 - 60) * core_auto_up;
+  bass_eq_db = 3.6 + (3.1 - 3.6) * core_auto_up;
+  bass_sc_relief_pct = 76 + (58 - 76) * core_auto_up;
+  low_bass_floor_pct = 42 + (12 - 42) * core_auto_up;
+  low_coherence_pct = 82 + (35 - 82) * core_auto_up;
+  low_release_stab_pct = 74 + (64 - 74) * core_auto_up;
+  adaptive_bass_coupling_pct = 65 + (92 - 65) * core_auto_up;
+  density_db = 4.7 + (4.5 - 4.7) * core_auto_up;
+  presence_db = 2.3 + (1.7 - 2.3) * core_auto_up;
+  brilliance_db = 3.2 + (1.9 - 3.2) * core_auto_up;
+  adaptive_top_coupling_pct = 25 + (52 - 25) * core_auto_up;
+  post_xt2_smooth_drive_pct = 20 + (24 - 20) * core_auto_up;
+  pre_final_drive_db = 0 + (-2.0 - 0) * core_auto_up;
+  clip_drive_db = -0.8 + (-1.5 + 0.8) * core_auto_up;
+  overshoot_pct = 72 + (100 - 72) * core_auto_up;
+  lookahead_ms = 0.54 + (1.0 - 0.54) * core_auto_up;
+  final_threshold_db = 0;
+  final_threshold_makeup_pct = 0;
   clip_ceiling_db = -0.1;
-  smooth_drive_rounder_pct = 0 + (0 - 0) * core_auto_down + (20 - 0) * core_auto_up;
-  clipper_style = core_auto_up > 0 ? 0 : 2;
+  smooth_drive_rounder_pct = 0 + (10 - 0) * core_auto_up;
+  // Keep Stream polish clipper behavior consistent across Auto-Adapt.
+  clipper_style = 2;
 );
 
 core_mode == 2 ? (
@@ -718,7 +745,7 @@ recomb_control = recomb_control_pct * 0.01;
 crossover_model = floor(clamp(crossover_model, 0, 3) + 0.5);
 pd_release = pd_release_pct * 0.01;
 upper_snubber = upper_snubber_pct * 0.01;
-first_hit_catch = first_hit_catch_pct * 0.01;
+first_hit_catch = 0; // startup peak catch retired
 gate_reopen_strength = gate_reopen_strength_pct * 0.01;
 gate_reopen_speed_sec = max(gate_reopen_speed_ms * 0.001, 0.005);
 
@@ -904,9 +931,18 @@ b4_thresh = db2lin(-14.5);
 b5_thresh = db2lin(-16.5);
 b6_thresh = db2lin(-18.0);
 
+const_db2lin_minus28 = db2lin(-28);
+const_db2lin_minus18 = db2lin(-18);
+const_db2lin_minus6 = db2lin(-6);
+const_db2lin_minus6_2 = db2lin(-6.2);
+const_db2lin_minus3_6 = db2lin(-3.6);
+
 clip_ref = ceiling * 0.985;
 mb_ref = ceiling * 0.985;
 mb_work_ref = mb_ref / max(clip_drive_mb * density_clip_drive, 0.25);
+
+b1_det_sc_gain = density_detector_gain * db2lin(-bass_eq_work_db * 0.55 * bass_sc_relief - 1.00 * low_bass_floor);
+b2_det_sc_gain = density_detector_gain * db2lin(-bass_eq_work_db * 0.35 * bass_sc_relief - 0.45 * low_bass_floor);
 
 adapt_bass_split_a = 1 - exp(-2*$pi*190/srate);
 adapt_bass_det_attack = exp(-1/(srate * 0.420));
@@ -991,6 +1027,11 @@ top_filter_mode == 1 ? (
 
 fcs_residue_a = 1 - exp(-2*$pi*12000/srate);
 
+@block
+pdc_delay != path_delay ? pdc_delay = path_delay;
+pdc_bot_ch != 0 ? pdc_bot_ch = 0;
+pdc_top_ch != 2 ? pdc_top_ch = 2;
+
 @sample
 core_state_reset ? (
   reset_dynamic_state();
@@ -998,6 +1039,8 @@ core_state_reset ? (
 );
 
 
+spl0 = abs(spl0) < 1000000000000 ? spl0 : 0;
+spl1 = abs(spl1) < 1000000000000 ? spl1 : 0;
 input_section_in_l = spl0;
 input_section_in_r = spl1;
 
@@ -1037,18 +1080,7 @@ input_section_proc_r = r;
 agc_section_in_l = l;
 agc_section_in_r = r;
 
-first_hit_catch > 0 ? (
-  startup_prev = startup_activity;
-  startup_level = absmax2(l, r);
-  quiet_factor = clamp((db2lin(-28) - startup_prev) / max(db2lin(-28), 0.000001), 0, 1);
-  hit_factor = clamp((startup_level - db2lin(-18)) / max(db2lin(-6), 0.000001), 0, 1);
-  first_hit_gain = db2lin(-2.5 * first_hit_catch * quiet_factor * hit_factor);
-  l *= first_hit_gain;
-  r *= first_hit_gain;
-  startup_activity = max(startup_level, startup_activity * startup_activity_release);
-) : (
-  startup_activity = max(absmax2(l, r), startup_activity * startup_activity_release);
-);
+startup_activity = max(absmax2(l, r), startup_activity * startup_activity_release);
 
 agc_l = l * agc_drive;
 agc_r = r * agc_drive;
@@ -1194,10 +1226,10 @@ mastering_lookahead_samps > 0 ? (
   master_net_makeup_db = lin2db(master_amp_level / max(master_raw_level, 0.000001));
   master_allow = clamp((master_net_makeup_db - 3.0) / 9.0, 0, 1);
 
-  master_catch_thresh = db2lin(-6.2);
+  master_catch_thresh = const_db2lin_minus6_2;
   master_catch_det = master_catch_env.peak_env(master_side_det, master_catch_attack, master_catch_release);
   master_target_gain = master_catch_det > master_catch_thresh ? master_catch_thresh / max(master_catch_det, 0.000001) : 1;
-  master_target_gain = clamp(master_target_gain, db2lin(-3.6), 1);
+  master_target_gain = clamp(master_target_gain, const_db2lin_minus3_6, 1);
   master_target_gain = 1 - master_allow * (1 - master_target_gain);
   master_target_gain < master_catch_gain ? (
     master_catch_gain = master_target_gain + master_catch_attack * (master_catch_gain - master_target_gain);
@@ -1441,8 +1473,8 @@ b4_l *= presence_gain * top_presence_adapt_gain; b4_r *= presence_gain * top_pre
 b5_l *= presence_gain * top_presence_adapt_gain; b5_r *= presence_gain * top_presence_adapt_gain;
 b6_l *= brilliance_gain * top_air_adapt_gain; b6_r *= brilliance_gain * top_air_adapt_gain;
 
-b1_det = absmax2(b1_l, b1_r) * density_detector_gain * db2lin(-bass_eq_work_db * 0.55 * bass_sc_relief - 1.00 * low_bass_floor);
-b2_det = absmax2(b2_l, b2_r) * density_detector_gain * db2lin(-bass_eq_work_db * 0.35 * bass_sc_relief - 0.45 * low_bass_floor);
+b1_det = absmax2(b1_l, b1_r) * b1_det_sc_gain;
+b2_det = absmax2(b2_l, b2_r) * b2_det_sc_gain;
 
 gate_xt2_strength = gate_effective * 0.78;
 low_band_release_gated = low_band_release * (1 - gate_xt2_strength) + gate_xt2_freeze_release * gate_xt2_strength;
@@ -1771,3 +1803,260 @@ normal_out_r = final_section_proc_r;
 
 spl0 = normal_out_l;
 spl1 = normal_out_r;
+
+gui_peak_in_l_sample = max(gui_peak_in_l_sample, abs(input_section_in_l));
+gui_peak_in_r_sample = max(gui_peak_in_r_sample, abs(input_section_in_r));
+gui_peak_out_l_sample = max(gui_peak_out_l_sample, abs(spl0));
+gui_peak_out_r_sample = max(gui_peak_out_r_sample, abs(spl1));
+
+
+@gfx 620 262
+
+gfx_setfont(1, "Arial", 11);
+gfx_setfont(2, "Arial", 11, 'b');
+gfx_setfont(3, "Arial", 9);
+gfx_setfont(4, "Arial", 18, 'b');
+gfx_setfont(5, "Arial", 10);
+gfx_setfont(6, "Arial", 24, 'b');
+
+function gui_color(r g b a)
+(
+  gfx_r = r; gfx_g = g; gfx_b = b; gfx_a = a;
+);
+
+function gui_fill(x y w h r g b a)
+(
+  gui_color(r,g,b,a);
+  gfx_rect(x,y,w,h,1);
+);
+
+function gui_frame(x y w h r g b a)
+(
+  gui_color(r,g,b,a);
+  gfx_rect(x,y,w,h,0);
+);
+
+function gui_hit(x y w h)
+(
+  mouse_x >= x && mouse_x <= x+w && mouse_y >= y && mouse_y <= y+h;
+);
+
+function core_mode_name(dest)
+(
+  core_mode == 0 ? strcpy(dest, "Podcast Leveler") :
+  core_mode == 1 ? strcpy(dest, "Stream polish") :
+                   strcpy(dest, "Smooth Limiter");
+);
+
+function gui_draw_mode(x y w h) local(hover mouse_down choice accent_r accent_g accent_b)
+(
+  hover = gui_hit(x,y,w,h);
+  mouse_down = mouse_cap & 1;
+
+  // Mode-specific accent color
+  core_mode == 0 ? ( accent_r = 0.82; accent_g = 0.65; accent_b = 0.32; ) :  // Podcast: warm amber
+  core_mode == 1 ? ( accent_r = 0.40; accent_g = 0.62; accent_b = 0.88; ) :  // Stream: cool blue
+                   ( accent_r = 0.58; accent_g = 0.62; accent_b = 0.68; );   // Limiter: muted silver
+
+  gui_fill(x,y,w,h, 0.105,0.125,0.155,1);
+  hover ? (
+    gui_frame(x,y,w,h, accent_r, accent_g, accent_b, 1);
+  ) : (
+    gui_frame(x,y,w,h, accent_r * 0.55, accent_g * 0.55, accent_b * 0.55, 1);
+  );
+
+  core_mode_name(#core_mode_text);
+  gui_color(0.88,0.91,0.96,1);
+  gfx_setfont(2);
+  gfx_measurestr(#core_mode_text, mode_w, mode_h);
+  gfx_x = x + 14;
+  gfx_y = y + (h - mode_h) * 0.5;
+  gfx_drawstr(#core_mode_text);
+
+  gui_color(accent_r * 0.85, accent_g * 0.85, accent_b * 0.85, 1);
+  gfx_x = x + w - 20;
+  gfx_y = y + h * 0.5 - 3;
+  gfx_line(gfx_x, gfx_y, gfx_x + 5, gfx_y + 5, 1);
+  gfx_line(gfx_x + 5, gfx_y + 5, gfx_x + 10, gfx_y, 1);
+
+  hover && mouse_down && !gui_last_mouse_down ? (
+    gfx_x = x;
+    gfx_y = y + h;
+    choice = gfx_showmenu("Podcast Leveler|Stream polish|Smooth Limiter");
+    choice > 0 ? (
+      core_mode = choice - 1;
+      sliderchange(1);
+    );
+  );
+);
+
+function gui_draw_slider(x y w slider_idx label min_val max_val default_val unit) local(track_y hover mouse_down val pct new_val fill_w handle_x value_w value_h)
+(
+  track_y = y + 28;
+  hover = gui_hit(x, y, w, 48);
+  mouse_down = mouse_cap & 1;
+
+  hover && mouse_down && !gui_last_mouse_down && gui_active_slider == -1 ? gui_active_slider = slider_idx;
+  !mouse_down && gui_active_slider == slider_idx ? gui_active_slider = -1;
+
+  gui_active_slider == slider_idx ? (
+    pct = clamp((mouse_x - x) / max(w,1), 0, 1);
+    new_val = min_val + (max_val - min_val) * pct;
+    slider_idx == 2 ? new_val = floor(new_val * 10 + 0.5) / 10 : new_val = floor(new_val + 0.5);
+    slider(slider_idx) = new_val;
+    sliderchange(slider_idx);
+  );
+
+  val = slider(slider_idx);
+  pct = clamp((val - min_val) / max(max_val - min_val, 0.000001), 0, 1);
+  fill_w = w * pct;
+  handle_x = x + fill_w;
+
+  gui_color(0.78,0.82,0.90,1);
+  gfx_setfont(1);
+  gfx_x = x;
+  gfx_y = y;
+  gfx_drawstr(label);
+
+  slider_idx == 2 ? sprintf(#core_value, "%.1f dB", val) : sprintf(#core_value, "%.0f percent", val);
+  gfx_setfont(2);
+  gfx_measurestr(#core_value, value_w, value_h);
+  gfx_x = x + w - value_w;
+  gfx_y = y;
+  gfx_drawstr(#core_value);
+
+  gui_fill(x, track_y, w, 7, 0.12,0.14,0.18,1);
+  gui_fill(x, track_y, fill_w, 7, 0.45,0.58,0.82,1);
+  gui_frame(x, track_y, w, 7, 0.24,0.28,0.36,1);
+
+  gui_color(hover || gui_active_slider == slider_idx ? 0.94 : 0.74, hover || gui_active_slider == slider_idx ? 0.96 : 0.79, hover || gui_active_slider == slider_idx ? 1.00 : 0.90, 1);
+  gfx_circle(handle_x, track_y + 3.5, 7, 1, 1);
+
+  slider_idx == 3 ? (
+    gui_color(0.48,0.54,0.66,1);
+    gfx_setfont(3);
+    gfx_x = x;
+    gfx_y = track_y + 14;
+    gfx_drawstr("0 percent = neutral");
+  );
+);
+
+function gui_draw_meter(x y w h level_l level_r label peak_hold_ptr) local(level peak_db pct fill_l fill_r bar_w db_w db_h tick_y tick_db i hold_pct hold_y)
+(
+  gui_fill(x,y,w,h, 0.08,0.10,0.13,1);
+  gui_frame(x,y,w,h, 0.22,0.26,0.34,1);
+
+  bar_w = (w - 9) * 0.5;
+  peak_db = lin2db(max(level_l, level_r));
+  pct = clamp((peak_db + 60) / 60, 0, 1);
+  fill_l = h * clamp((lin2db(level_l) + 60) / 60, 0, 1);
+  fill_r = h * clamp((lin2db(level_r) + 60) / 60, 0, 1);
+
+  gui_fill(x+3, y+h-fill_l-2, bar_w, fill_l, 0.42,0.58,0.82,1);
+  gui_fill(x+6+bar_w, y+h-fill_r-2, bar_w, fill_r, 0.42,0.58,0.82,1);
+
+  // Tick marks at -48, -24, -12, -6, 0 dB
+  i = 0;
+  loop(5,
+    tick_db = i == 0 ? -48 : i == 1 ? -24 : i == 2 ? -12 : i == 3 ? -6 : 0;
+    tick_y = y + h - h * clamp((tick_db + 60) / 60, 0, 1) - 2;
+    gui_color(0.32, 0.36, 0.44, 0.7);
+    gfx_line(x + 2, tick_y, x + w - 3, tick_y, 0);
+    i += 1;
+  );
+
+  // Peak hold tick
+  peak_hold_ptr[] = max(peak_db, peak_hold_ptr[] - 0.35);
+  hold_pct = clamp((peak_hold_ptr[] + 60) / 60, 0, 1);
+  hold_pct > 0.001 ? (
+    hold_y = y + h - h * hold_pct - 2;
+    gui_color(0.92, 0.78, 0.38, 0.9);
+    gfx_line(x + 2, hold_y, x + w - 3, hold_y, 0);
+  );
+
+  gui_color(0.70,0.75,0.84,1);
+  gfx_setfont(5);
+  gfx_measurestr(label, db_w, db_h);
+  gfx_x = x + (w - db_w) * 0.5;
+  gfx_y = y + h + 5;
+  gfx_drawstr(label);
+
+  sprintf(#core_db, "%.1f", peak_db);
+  gfx_setfont(3);
+  gfx_measurestr(#core_db, db_w, db_h);
+  gfx_x = x + (w - db_w) * 0.5;
+  gfx_y = y + h - db_h - 5;
+  gfx_drawstr(#core_db);
+);
+
+
+
+mouse_down = mouse_cap & 1;
+canvas_w = 620;
+canvas_h = 262;
+gui_dx = max(0, floor((gfx_w - canvas_w) * 0.5));
+gui_dy = max(0, floor((gfx_h - canvas_h) * 0.5));
+
+gui_peak_in_l = max(gui_peak_in_l * 0.82, gui_peak_in_l_sample);
+gui_peak_in_r = max(gui_peak_in_r * 0.82, gui_peak_in_r_sample);
+gui_peak_out_l = max(gui_peak_out_l * 0.82, gui_peak_out_l_sample);
+gui_peak_out_r = max(gui_peak_out_r * 0.82, gui_peak_out_r_sample);
+gui_peak_in_l_sample = 0;
+gui_peak_in_r_sample = 0;
+gui_peak_out_l_sample = 0;
+gui_peak_out_r_sample = 0;
+
+gui_fill(0,0,gfx_w,gfx_h, 0.055,0.065,0.085,1);
+
+gx = gui_dx;
+gy = gui_dy;
+
+gui_fill(gx,gy,canvas_w,50, 0.08,0.10,0.14,1);
+gui_frame(gx,gy,canvas_w,50, 0.18,0.22,0.30,1);
+gui_color(0.92,0.95,1,1);
+gfx_setfont(4);
+gfx_x = gx + 18;
+gfx_y = gy + 11;
+gfx_drawstr("OPTILAB CORE");
+gui_color(0.58,0.64,0.75,1);
+gfx_setfont(5);
+gfx_x = gx + 20;
+gfx_y = gy + 33;
+gfx_drawstr("broadcast-style leveling, polish, and peak control");
+
+gui_fill(gx + 18, gy + 68, 355, 178, 0.075,0.09,0.12,1);
+gui_frame(gx + 18, gy + 68, 355, 178, 0.18,0.22,0.30,1);
+gui_color(0.76,0.82,0.92,1);
+gfx_setfont(2);
+gfx_x = gx + 34;
+gfx_y = gy + 82;
+gfx_drawstr("CONTROLS");
+
+gui_color(0.58,0.64,0.74,1);
+gfx_setfont(5);
+gfx_x = gx + 34;
+gfx_y = gy + 104;
+gfx_drawstr("Mode, input, and adaptation stay available as normal REAPER sliders.");
+
+gui_draw_mode(gx + 34, gy + 128, 210, 34);
+gui_draw_slider(gx + 34, gy + 177, 305, 2, "Input Drive", -12, 18, 0, "dB");
+gui_draw_slider(gx + 34, gy + 225, 305, 3, "Auto-Adapt", 0, 100, 0, "percent");
+
+gui_fill(gx + 392, gy + 68, 210, 178, 0.075,0.09,0.12,1);
+gui_frame(gx + 392, gy + 68, 210, 178, 0.18,0.22,0.30,1);
+gui_color(0.76,0.82,0.92,1);
+gfx_setfont(2);
+gfx_x = gx + 408;
+gfx_y = gy + 82;
+gfx_drawstr("PEAK VIEW");
+
+gui_draw_meter(gx + 420, gy + 112, 48, 92, gui_peak_in_l, gui_peak_in_r, "Input", gui_peak_hold_in);
+gui_draw_meter(gx + 506, gy + 112, 48, 92, gui_peak_out_l, gui_peak_out_r, "Output", gui_peak_hold_out);
+
+gui_color(0.52,0.58,0.68,1);
+gfx_setfont(3);
+gfx_x = gx + 416;
+gfx_y = gy + 222;
+gfx_drawstr("Ceiling target: -0.1 dBFS");
+
+gui_last_mouse_down = mouse_down;
