@@ -107,4 +107,4 @@ Please send feedback, bug reports, or suggested changes to:
 
 `info@lanesaudio.com`
 
-If you share a modified version publicly, please make it clear that it has been modified from the original OptiLab Core release, and provide a link to it.
+If you share a modified version publicly, please make it clear that it has been modified from the original OptiLab Core release.
