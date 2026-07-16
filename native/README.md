@@ -9,6 +9,9 @@ the classic Winamp DSP wrapper.
 - `winamp/`: classic Winamp DSP ABI, PCM conversion, and accessible settings UI
 - `tests/`: Core API, exhaustive PCM, and DLL loading tests
 
+See [`API.md`](API.md) for the supported native C++ API, call order,
+parameters, latency behavior, and integration notes.
+
 The WAV utility source in `src` is retained for developer validation. It is not
 packaged or supported as a public application.
 
