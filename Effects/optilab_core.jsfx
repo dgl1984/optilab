@@ -1,10 +1,14 @@
 // @description OptiLab Core
-// @version 1.0.3
+// @version 1.1.0
 // @author LanesAudio
 // @about
 //   OptiLab Core is a JSFX audio processor for REAPER.
 //   It brings leveling, density, tone control, saturation, and limiting together.
 // @changelog
+//   v1.1.0
+//   - Corrected Stream polish and Smooth Limiter tuning.
+//   - Reduced inactive sample-path work without changing output.
+//   - Added the matching native Core and Winamp DSP release.
 //   v1.0.3
 //   - Refined Auto-Adapt behavior in Podcast Leveler and Stream polish.
 //   - Improved handling of spoken-word material with pauses between phrases.
@@ -24,7 +28,7 @@
 // @provides
 //   optilab_core.jsfx
 
-desc:OptiLab Core v1.0.3 (LanesAudio)
+desc:OptiLab Core v1.1.0 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
@@ -237,11 +241,14 @@ function mb_soft_clip(x th amt knee_mul) local(c)
 function mb_soft_clip_dc(x th amt knee_mul cancel_amt a) instance(dc_z) local(c dist dist_low y)
 (
   c = soft_clip_knee(x, th, knee_mul);
-  dist = c - x;
-
-  dc_z += a * (dist - dc_z);
-  dist_low = dc_z;
-  y = c - dist_low * cancel_amt;
+  cancel_amt > 0 ? (
+    dist = c - x;
+    dc_z += a * (dist - dc_z);
+    dist_low = dc_z;
+    y = c - dist_low * cancel_amt;
+  ) : (
+    y = c;
+  );
   x * (1 - amt) + y * amt;
 );
 
@@ -331,6 +338,7 @@ function reset_dynamic_state() local(i)
   agc_high_env.e = 0;
   final_full_env.e = 0;
   final_threshold_drive_s = final_threshold_drive_target > 0 ? final_threshold_drive_target : 1;
+  final_threshold_guard_gain = 1;
   preclip.gain = 1;
   final_round_l.prev_sat = 0;
   final_round_r.prev_sat = 0;
@@ -514,15 +522,15 @@ core_mode == 0 ? (
   smooth_drive_rounder_pct = 58;
 ) : core_mode == 1 ? (
   input_trim_db = 4.5;
-  phase_rotate_pct = 4;
+  phase_rotate_pct = 5;
   agc_amount_pct = 56;
-  agc_drive_db = 0.2;
-  bass_coupling_pct = 60;
-  release_time = 6.1;
-  gate_threshold_db = -25;
+  agc_drive_db = 0;
+  bass_coupling_pct = 50;
+  release_time = 5;
+  gate_threshold_db = -30;
   gate_reopen_speed_ms = 50;
   gate_reopen_strength_pct = 55;
-  density_db = 4.7;
+  density_db = 3.5;
   xt2_amount_pct = 84;
   bass_eq_db = 3.6;
   presence_db = 2.3;
@@ -530,37 +538,38 @@ core_mode == 0 ? (
   clip_drive_db = -0.8;
   clipper_style = 2;
   pre_limiter_pct = 44;
-  clip_restraint_pct = 26;
+  clip_restraint_pct = 38;
   clip_ceiling_db = -0.1;
-  final_threshold_db = 0;
-  final_threshold_makeup_pct = 0;
+  final_threshold_db = -0.8;
+  final_threshold_makeup_pct = 100;
   stereo_mode = 0;
   stereo_width_pct = 100;
-  top_filter_mode = 1;
+  top_filter_mode = 0;
   subsonic_hpf = 0;
-  output_trim_db = 0;
-  mb_clip_pct = 18;
-  dc_cancel_pct = 64;
-  overshoot_pct = 72;
-  recomb_control_pct = 68;
+  output_trim_db = 1.1;
+  mb_clip_pct = 16;
+  dc_cancel_pct = 46;
+  overshoot_pct = 100;
+  recomb_control_pct = 10;
   lookahead_ms = 0.54;
   crossover_model = 2;
   pd_release_pct = 78;
   bass_sc_relief_pct = 76;
-  low_coherence_pct = 82;
+  low_coherence_pct = 66;
   low_release_stab_pct = 74;
   transition_fill_pct = 12;
   low_bass_floor_pct = 42;
   adaptive_bass_coupling_pct = 65;
-  adaptive_top_coupling_pct = 25;
+  adaptive_top_coupling_pct = 50;
   bass_clip_pct = 32;
   bass_clip_density_pct = 6;
-  upper_snubber_pct = 42;
+  upper_snubber_pct = 20;
   snubber_lookahead_ms = 0.73;
   first_hit_catch_pct = 0;
-  post_agc_smooth_drive_pct = 14;
-  post_xt2_smooth_drive_pct = 20;
-  pre_final_drive_db = 0;
+  post_agc_smooth_drive_pct = 12;
+  post_xt2_smooth_drive_pct = 12;
+  pre_final_drive_db = -0.4;
+  smooth_drive_rounder_pct = 50;
 ) : (
   input_trim_db = 0;
   phase_rotate_pct = 0;
@@ -594,12 +603,12 @@ core_mode == 0 ? (
   clip_drive_db = 0;
   recomb_control_pct = 6;
   dc_cancel_pct = 0;
-  upper_snubber_pct = 100;
+  upper_snubber_pct = 32;
   snubber_lookahead_ms = 1.5;
-  post_xt2_smooth_drive_pct = 10;
+  post_xt2_smooth_drive_pct = 12;
   stereo_mode = 0;
   stereo_width_pct = 100;
-  pre_final_drive_db = -2;
+  pre_final_drive_db = -1.6;
   clipper_style = 0;
   pre_limiter_pct = 100;
   clip_restraint_pct = 60;
@@ -656,36 +665,36 @@ core_mode == 0 ? (
 
 core_mode == 1 ? (
   // Stream Adapt 0 stays anchored to the established Stream polish sound.
-  // Higher Adapt stabilizes mixed program material without turning Stream into a louder/slammed preset.
-  agc_amount_pct = 56 + (72 - 56) * core_auto_up;
-  agc_drive_db = 0.2 + (0 - 0.2) * core_auto_up;
-  release_time = 6.1 + (6.0 - 6.1) * core_auto_up;
-  pd_release_pct = 78 + (72 - 78) * core_auto_up;
-  gate_threshold_db = -30 + 5 * core_auto_up;
+  // Higher Adapt stabilizes mixed program material without pulling down loudness against the ceiling.
+  agc_amount_pct = 56 + (62 - 56) * core_auto_up;
+  agc_drive_db = 0;
+  release_time = 5 + (5.6 - 5) * core_auto_up;
+  pd_release_pct = 78 + (76 - 78) * core_auto_up;
+  gate_threshold_db = -30 + 2 * core_auto_up;
   gate_reopen_speed_ms = 50;
-  gate_reopen_strength_pct = 55 + (35 - 55) * core_auto_up;
+  gate_reopen_strength_pct = 55 + (48 - 55) * core_auto_up;
   first_hit_catch_pct = 0;
-  post_agc_smooth_drive_pct = 14 + (18 - 14) * core_auto_up;
-  bass_coupling_pct = 60 + (54 - 60) * core_auto_up;
-  bass_eq_db = 3.6 + (3.1 - 3.6) * core_auto_up;
-  bass_sc_relief_pct = 76 + (58 - 76) * core_auto_up;
-  low_bass_floor_pct = 42 + (12 - 42) * core_auto_up;
-  low_coherence_pct = 82 + (35 - 82) * core_auto_up;
-  low_release_stab_pct = 74 + (64 - 74) * core_auto_up;
-  adaptive_bass_coupling_pct = 65 + (92 - 65) * core_auto_up;
-  density_db = 4.7 + (4.5 - 4.7) * core_auto_up;
-  presence_db = 2.3 + (1.7 - 2.3) * core_auto_up;
-  brilliance_db = 3.2 + (1.9 - 3.2) * core_auto_up;
-  adaptive_top_coupling_pct = 25 + (52 - 25) * core_auto_up;
-  post_xt2_smooth_drive_pct = 20 + (24 - 20) * core_auto_up;
-  pre_final_drive_db = 0 + (-2.0 - 0) * core_auto_up;
-  clip_drive_db = -0.8 + (-1.5 + 0.8) * core_auto_up;
-  overshoot_pct = 72 + (100 - 72) * core_auto_up;
-  lookahead_ms = 0.54 + (1.0 - 0.54) * core_auto_up;
-  final_threshold_db = 0;
-  final_threshold_makeup_pct = 0;
+  post_agc_smooth_drive_pct = 12 + (14 - 12) * core_auto_up;
+  bass_coupling_pct = 50 + (52 - 50) * core_auto_up;
+  bass_eq_db = 3.6 + (3.4 - 3.6) * core_auto_up;
+  bass_sc_relief_pct = 76 + (70 - 76) * core_auto_up;
+  low_bass_floor_pct = 42 + (34 - 42) * core_auto_up;
+  low_coherence_pct = 66 + (58 - 66) * core_auto_up;
+  low_release_stab_pct = 74 + (72 - 74) * core_auto_up;
+  adaptive_bass_coupling_pct = 65 + (72 - 65) * core_auto_up;
+  density_db = 3.5 + (3.8 - 3.5) * core_auto_up;
+  presence_db = 2.3;
+  brilliance_db = 3.2;
+  adaptive_top_coupling_pct = 50;
+  post_xt2_smooth_drive_pct = 12 + (14 - 12) * core_auto_up;
+  pre_final_drive_db = -0.4;
+  clip_drive_db = -0.8;
+  overshoot_pct = 100;
+  lookahead_ms = 0.54 + (0.70 - 0.54) * core_auto_up;
+  final_threshold_db = -0.8;
+  final_threshold_makeup_pct = 100;
   clip_ceiling_db = -0.1;
-  smooth_drive_rounder_pct = 0 + (10 - 0) * core_auto_up;
+  smooth_drive_rounder_pct = 50 + (54 - 50) * core_auto_up;
   // Keep Stream polish clipper behavior consistent across Auto-Adapt.
   clipper_style = 2;
 );
@@ -693,8 +702,8 @@ core_mode == 1 ? (
 core_mode == 2 ? (
   density_db = -0.4 + (-1.2 + 0.4) * core_auto_down + (-0.8 + 0.4) * core_auto_up;
   snubber_lookahead_ms = 1.5 + (1.5 - 1.5) * core_auto_down + (2.0 - 1.5) * core_auto_up;
-  post_xt2_smooth_drive_pct = 10 + (4 - 10) * core_auto_down + (20 - 10) * core_auto_up;
-  pre_final_drive_db = -2 + (-2 + 2) * core_auto_down + (-3.0 + 2) * core_auto_up;
+  post_xt2_smooth_drive_pct = 12 + (4 - 12) * core_auto_down + (20 - 12) * core_auto_up;
+  pre_final_drive_db = -1.6 + (-2 + 1.6) * core_auto_down + (-3.0 + 1.6) * core_auto_up;
   clip_drive_db = 0 + (0 - 0) * core_auto_down + (-0.6 - 0) * core_auto_up;
   overshoot_pct = 100 + (100 - 100) * core_auto_down + (100 - 100) * core_auto_up;
   lookahead_ms = 0.73 + (0.73 - 0.73) * core_auto_down + (1.5 - 0.73) * core_auto_up;
@@ -705,7 +714,7 @@ core_mode == 2 ? (
 );
 
 adaptive_top_coupling_pct = clamp(adaptive_top_coupling_pct, 0, 100);
-output_trim_db = min(output_trim_db, 0);
+output_trim_db = clamp(output_trim_db, -12, 3);
 
 input_gain = db2lin(input_trim_db);
 agc_drive = db2lin(agc_drive_db);
@@ -733,6 +742,7 @@ post_xt2_smooth_drive_amt = clamp(post_xt2_smooth_drive_pct, 0, 50) * 0.01;
 post_agc_smooth_recovery_gain = db2lin(2.0 * clamp(post_agc_smooth_drive_pct, 0, 25) / 25.0);
 post_xt2_smooth_recovery_gain = db2lin(2.0 * clamp(post_xt2_smooth_drive_pct, 0, 50) / 50.0);
 pre_final_drive_gain = db2lin(clamp(pre_final_drive_db, -12, 12));
+output_gain = db2lin(output_trim_db);
 
 mb_clip_mix = mb_clip_pct * 0.01;
 dc_cancel = dc_cancel_pct * 0.01;
@@ -1500,9 +1510,11 @@ g4 = 1 - xt2_mix * (1 - g4);
 g5 = 1 - xt2_mix * (1 - g5);
 g6 = 1 - xt2_mix * (1 - g6);
 
-low_shared_gain = sqrt(max(g1 * g2, 0.000001));
-g1 = g1 * (1 - low_coherence) + low_shared_gain * low_coherence;
-g2 = g2 * (1 - low_coherence) + low_shared_gain * low_coherence;
+low_coherence > 0 ? (
+  low_shared_gain = sqrt(max(g1 * g2, 0.000001));
+  g1 = g1 * (1 - low_coherence) + low_shared_gain * low_coherence;
+  g2 = g2 * (1 - low_coherence) + low_shared_gain * low_coherence;
+);
 
 g6 = g5;
 
@@ -1653,10 +1665,15 @@ p6_l = dp6_l; p6_r = dp6_r;
 
 sum_l = p1_l + p2_l + p3_l + p4_l + p5_l + p6_l;
 sum_r = p1_r + p2_r + p3_r + p4_r + p5_r + p6_r;
-recomb_l = soft_clip_knee(sum_l, recomb_clip_thresh, recomb_clip_knee);
-recomb_r = soft_clip_knee(sum_r, recomb_clip_thresh, recomb_clip_knee);
-l = sum_l + recomb_control * (recomb_l - sum_l);
-r = sum_r + recomb_control * (recomb_r - sum_r);
+recomb_control > 0 ? (
+  recomb_l = soft_clip_knee(sum_l, recomb_clip_thresh, recomb_clip_knee);
+  recomb_r = soft_clip_knee(sum_r, recomb_clip_thresh, recomb_clip_knee);
+  l = sum_l + recomb_control * (recomb_l - sum_l);
+  r = sum_r + recomb_control * (recomb_r - sum_r);
+) : (
+  l = sum_l;
+  r = sum_r;
+);
 
 transition_fill > 0 ? (
   l = transition_peak_l.biquad_run(l);
@@ -1706,18 +1723,32 @@ final_threshold_drive_s <= 0 ? final_threshold_drive_s = final_threshold_drive_t
 final_threshold_drive_s = final_threshold_drive_target + final_threshold_smooth * (final_threshold_drive_s - final_threshold_drive_target);
 final_threshold_drive = final_threshold_drive_s;
 
-final_threshold_makeup_cancel = final_threshold_drive > 1 ? exp(-log(final_threshold_drive) * (1 - final_threshold_makeup)) : 1;
+final_threshold_makeup_cancel = (final_threshold_drive > 1 && final_threshold_makeup < 0.999999) ? exp(-log(final_threshold_drive) * (1 - final_threshold_makeup)) : 1;
 
 
 l *= final_threshold_drive;
 r *= final_threshold_drive;
 
+final_threshold_drive > 1.000001 ? (
+  threshold_guard_det = absmax2(l, r);
+  threshold_guard_target = threshold_guard_det > clip_ref ? clip_ref / max(threshold_guard_det, 0.000001) : 1;
+  threshold_guard_target < final_threshold_guard_gain ? (
+    final_threshold_guard_gain = threshold_guard_target;
+  ) : (
+    final_threshold_guard_gain = threshold_guard_target + clip_release * (final_threshold_guard_gain - threshold_guard_target);
+  );
+  l *= final_threshold_guard_gain;
+  r *= final_threshold_guard_gain;
+) : (
+  final_threshold_guard_gain = 1 + clip_release * (final_threshold_guard_gain - 1);
+);
+
 clip_full_det = absmax2(l, r);
 clip_full_env = final_full_env.peak_env(clip_full_det, clip_attack, clip_release);
 level_factor = clamp((clip_full_env - ceiling * 0.55) / max(ceiling * 0.35, 0.000001), 0, 1);
 protect_db = peak_only_final_limiter ? 0 : -2.0 * clip_restraint * level_factor;
-dynamic_clip_gain = db2lin(protect_db);
-final_drive_gain = peak_only_final_limiter ? 1 : clip_drive_full * dynamic_clip_gain;
+dynamic_clip_gain = protect_db < 0 ? db2lin(protect_db) : 1;
+final_drive_gain = peak_only_final_limiter ? 1 : dynamic_clip_gain;
 
 l *= final_drive_gain;
 r *= final_drive_gain;
@@ -1742,11 +1773,15 @@ peak_only_final_limiter ? (
 
 dist_l = clip_l - clip_in_l;
 dist_r = clip_r - clip_in_r;
-dist_low_l = dist_lpf_l.onepole_lp(dist_l, dist_cancel_a);
-dist_low_r = dist_lpf_r.onepole_lp(dist_r, dist_cancel_a);
-
-l = clip_l - dist_low_l * dc_cancel * 0.45;
-r = clip_r - dist_low_r * dc_cancel * 0.45;
+dc_cancel > 0 ? (
+  dist_low_l = dist_lpf_l.onepole_lp(dist_l, dist_cancel_a);
+  dist_low_r = dist_lpf_r.onepole_lp(dist_r, dist_cancel_a);
+  l = clip_l - dist_low_l * dc_cancel * 0.45;
+  r = clip_r - dist_low_r * dc_cancel * 0.45;
+) : (
+  l = clip_l;
+  r = clip_r;
+);
 
 top_filter_mode == 1 ? (
   l = lpf15_1_l.biquad_run(l);
@@ -1764,6 +1799,9 @@ smooth_drive_rounder_amt > 0.0000001 ? (
   l = final_round_l.smooth_drive_rounder(l, smooth_drive_rounder_amt);
   r = final_round_r.smooth_drive_rounder(r, smooth_drive_rounder_amt);
 );
+
+l *= output_gain;
+r *= output_gain;
 
 fcs_thresh = fcs_thresh_setting;
 ov_l = l - hard_limit(l, fcs_thresh);

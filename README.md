@@ -1,110 +1,122 @@
 # OptiLab Core
 
-OptiLab Core is a free JSFX audio processor for REAPER. It was inspired by the kind of processing used in broadcast chains, mastering limiters, and other tools that help shape finished audio. It is not meant to be a clone of one specific piece of hardware or software. The goal was to take some of those ideas — leveling, density, control, saturation, limiting, and polish — and make them easier to reach from a simple plugin.
+OptiLab Core is a free audio processor from LanesAudio for leveling, density,
+tone control, saturation, limiting, and general program polish. It is available
+as a JSFX for REAPER and as a classic Winamp-compatible DSP plug-in for Windows.
 
-OptiLab Core has three main controls: **Mode**, **Input**, and **Auto-Adapt**. That simplicity is intentional. Sometimes I have to stack compressor and limiter plugins to get the sound I want. That can work, but it can also be annoying when I just want to get to a useful result quickly. OptiLab Core came from wanting something simpler that I could reach for during normal work.
+The processor has three main controls: **Mode**, **Input**, and **Auto-Adapt**.
+That simplicity is intentional. OptiLab Core is designed to reach a useful,
+finished sound without building a large processor chain.
 
-It does not offer audio restoration tools, and it is not meant to magically fix damaged or badly recorded audio. But for podcasts, streams, voice work, music playback, and quick mastering-style polish, it can be a simple way to add control, texture, and a more finished sound without building a large processor chain.
+It does not provide audio restoration and cannot repair damaged recordings. It
+is intended for podcasts, streams, voice work, music playback, internet radio,
+and quick mastering-style polish.
 
-## A few practical notes
+## Modes
 
-OptiLab Core is intentionally simple. It is not a cut-down toy, and it is not trying to replace every processor you own. The idea is to give you a small number of controls that can still lead to a finished, useful sound.
+### Podcast Leveler
 
-Start gently. A little input drive can go a long way. If the sound becomes too flat, too dense, or too pushed, turn **Input** down before changing everything else.
+Designed for speech, podcasts, voice tracks, and mixed voice content. It focuses
+on leveling, control, and a smoother mid-focused sound.
 
-## Quick start
+### Stream polish
 
-1. Choose a Mode.
-2. Switching modes will adjust the Input to a good starting value for that mode.
-3. Raise or lower Input until the processor feels active but not strained.
-4. Adjust Auto-Adapt if you want more leveling, density, tone control, or protection.
+Designed for music, internet radio, and higher-energy material. It provides a
+more finished broadcast-style sound without requiring extensive setup.
 
-## What it does
+### Smooth Limiter
 
-OptiLab Core brings leveling, density, tone control, saturation, and limiting together in a way that can be shaped from three main controls:
+Designed for clean limiting and mastering-style use where peak control is more
+important than an aggressive broadcast sound.
 
-- Leveling for voice and mixed program material
-- Broadcast-style density and control
-- Smooth limiting and peak handling
-- Bass and high-frequency shaping and protection
-- Simple control that does more than it may appear to at first
+## Controls
 
-The goal is not just loudness. The goal is useful control that still sounds musical.
+- **Mode** chooses the general processing behavior.
+- **Input** controls how hard the processor is driven.
+- **Auto-Adapt** adjusts several leveling, tone, density, and protection stages
+  together.
 
-## The controls
+Start gently. If the result becomes too flat, dense, or pushed, lower Input
+before changing everything else.
 
-### Mode
+## What is new in v1.1.0
 
-Choose the general job you want OptiLab Core to do.
+Version 1.1.0 keeps the same simple REAPER JSFX interface and adds a matching
+Winamp-compatible DSP plug-in for Windows.
 
-**Podcast Leveler**
+For existing JSFX users, the biggest change is internal: Stream polish now uses
+safer peak handling while still aiming for a finished, full-level result near
+the output ceiling when the material calls for it. Auto-Adapt should feel more
+controlled on difficult music and mixed program material instead of getting
+quieter while still hitting peaks.
 
-Designed for speech, podcasting, voice tracks, and mixed voice content. This mode focuses on leveling, control, and a smoother mid-focused sound.
+The Winamp DSP is a native Windows port of the same OptiLab Core processing
+design used by the JSFX. It was translated from the JSFX into a small C++ audio
+engine and wrapped in the classic 32-bit Winamp DSP/Effect interface, with the
+same three controls: Mode, Input drive, and Auto-adapt.
 
-**Stream polish**
+## Output ceiling and sample rates
 
-Designed for music, internet radio, and higher-energy material. This mode gives a more finished, broadcast-style sound without requiring a lot of setup.
+OptiLab Core clamps its own output samples to the ceiling selected by each
+mode. If a host processes Core at one sample rate and then converts the result
+to another rate, that later resampling can create new peaks above Core's sample
+ceiling. This is normal resampling behavior and does not mean Core skipped its
+final limiter.
 
-**Smooth Limiter**
+For a controlled ceiling test, use the same project, processing, and output
+sample rate. If the final delivery workflow must resample after Core, measure
+the converted file and apply any required true-peak or delivery limiting after
+that conversion.
 
-Designed for cleaner limiting and mastering-style use where you want control without turning the whole processor into an aggressive broadcast chain.
+## Downloads
 
-### Input
+Release downloads are available from the repository's GitHub Releases page.
 
-Input controls how hard the processor is driven. This is the first control to adjust.
+- REAPER users need `optilab_core.jsfx`.
+- Winamp-compatible hosts need `OptiLab-Core-1.1.0-Winamp-DSP-x86.zip`.
 
-If the sound is too flat, too dense, or too pushed, turn Input down. If the processor is barely changing anything, turn Input up.
+## REAPER installation
 
-### Auto-Adapt
+1. Download `optilab_core.jsfx` from the latest release.
+2. In REAPER, choose **Options > Show REAPER resource path in explorer/finder**.
+3. Open the `Effects` folder and copy the JSFX file into it.
+4. Restart REAPER if it is already running.
+5. Add OptiLab Core from REAPER's FX browser.
 
-Auto-Adapt changes the way OptiLab Core balances leveling, tone, density, and protection. It adjusts several parts of the processor at once, depending on the selected Mode.
+## Winamp-compatible DSP installation and use
 
-Lower Auto-Adapt settings stay closer to the base Mode. Higher settings allow the processor to work harder and adapt more aggressively.
+The Windows DLL uses the classic 32-bit Winamp DSP/Effect interface. It can be
+used by Winamp and by compatible Windows broadcast applications that support
+Winamp DSP plug-ins.
 
-In Podcast Leveler, Auto-Adapt can help with uneven speech, jumpy levels, and harsh or difficult voice recordings. In Stream polish, Auto-Adapt can add more stability and protection for mixed program material. Smooth Limiter already has a focused job, so its behavior remains more direct.
+1. Download and extract the Winamp DSP ZIP from the latest release.
+2. Close the host application.
+3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
+4. Restart the host and select **OptiLab Core 1.1.0** in its DSP configuration.
 
-A good starting workflow is:
+Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
+require administrator approval. Other hosts choose their own plug-in folders.
 
-1. Choose the Mode.
-2. Adjust Input until the processor sounds right.
-3. Use Auto-Adapt if you want more control, density, or protection.
+The configuration window uses standard Windows controls with keyboard access,
+normal focus indication, and screen-reader-friendly labels. See
+[`native/WINAMP.md`](native/WINAMP.md) for complete details and troubleshooting.
 
-## Installation
-
-OptiLab Core is a JSFX plugin for REAPER. Download the latest release, then copy the `.jsfx` file into your REAPER Effects folder.
-
-To find the correct folder, open REAPER and go to:
-
-**Options > Show REAPER resource path in explorer/finder...**
-
-Once that folder opens, go into the **Effects** folder and copy the OptiLab Core `.jsfx` file there.
-
-After that, restart REAPER if it is already running, then add OptiLab Core from REAPER’s FX browser like any other JSFX effect.
-
-## Download
-
-The latest version will be available from the GitHub Releases section for this repository.
+Use the Winamp DSP the same way you use the JSFX: choose a mode, set Input so
+the processor is working without sounding overdriven, then raise Auto-adapt only
+if you want more automatic leveling, tone balancing, and protection.
 
 ## Donations and contact
 
-OptiLab Core is free. If it helps your station, stream, podcast, music work, or mastering workflow, donations are welcome and appreciated. They are not required. I would rather people actually use the processor than lock it behind a checkout page.
-
-If you like it and want to support more development, you can donate through PayPal:
+OptiLab Core is free. Donations are welcome but never required.
 
 [Donate via PayPal](https://paypal.me/dgl1984)
 
-For questions, bug reports, or feedback, contact:
+Questions, bug reports, and accessibility feedback: `info@lanesaudio.com`
 
-`info@lanesaudio.com`
+## License
 
-## License and modifications
+OptiLab Core is released under the Apache License 2.0. You may use, modify, and
+redistribute it under the terms of the included [`LICENSE`](LICENSE) file.
 
-OptiLab Core is released under the Apache License 2.0. You may use it, modify it, and share modified versions under the terms of that license.
-
-If you make improvements, fixes, presets, accessibility changes, or useful tweaks, I would genuinely like to hear about them. I may be able to incorporate good changes into the main version so everyone benefits.
-
-Please send feedback, bug reports, or suggested changes to:
-
-`info@lanesaudio.com`
-
-If you share a modified version publicly, please make it clear that it has been modified from the original OptiLab Core release.
+If you distribute a modified version, clearly identify it as modified from the
+original LanesAudio OptiLab Core release.

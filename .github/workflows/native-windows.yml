@@ -1,0 +1,94 @@
+name: Native Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure Win32
+        run: cmake --preset vs2022-win32 -S native
+
+      - name: Build Win32 Release
+        run: cmake --build native/build-winamp --config Release
+
+      - name: Test Win32 Release
+        run: ctest --test-dir native/build-winamp -C Release --output-on-failure
+
+      - name: Verify DLL architecture, export, and runtime dependencies
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $visualStudio = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          $dumpbin = Get-ChildItem "$visualStudio\VC\Tools\MSVC" -Filter dumpbin.exe -Recurse |
+            Select-Object -First 1 -ExpandProperty FullName
+          $dll = "native\build-winamp\Release\dsp_optilab_core.dll"
+          $headers = & $dumpbin /headers /exports $dll | Out-String
+          if ($headers -notmatch "14C machine \(x86\)" -or
+              $headers -notmatch "winampDSPGetHeader2") {
+            throw "The DLL is not x86 or is missing winampDSPGetHeader2."
+          }
+          $dependencies = & $dumpbin /dependents $dll | Out-String
+          if ($dependencies -match "VCRUNTIME|MSVCP|api-ms-win-crt") {
+            throw "The Release DLL depends on the dynamic Microsoft C/C++ runtime."
+          }
+
+      - name: Configure x64
+        run: cmake --preset vs2022-x64 -S native
+
+      - name: Build and test x64 Release
+        run: |
+          cmake --build native/build --config Release
+          ctest --test-dir native/build -C Release --output-on-failure
+
+      - name: Package Winamp DSP
+        shell: pwsh
+        run: ./scripts/package-winamp.ps1
+
+      - name: Upload tested release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: optilab-core-winamp-dsp-x86
+          path: |
+            dist/*.zip
+            dist/*-SHA256.txt
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download tested release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: optilab-core-winamp-dsp-x86
+          path: dist
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem ./dist -File | Select-Object -ExpandProperty FullName
+          gh release create $env:GITHUB_REF_NAME @assets `
+            --verify-tag `
+            --title "OptiLab Core $env:GITHUB_REF_NAME" `
+            --generate-notes

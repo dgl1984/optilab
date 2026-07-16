@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "vs2022-x64",
+      "displayName": "Visual Studio 2022 x64",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "vs2022-win32",
+      "displayName": "Visual Studio 2022 Win32 (Winamp DSP)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "Win32",
+      "binaryDir": "${sourceDir}/build-winamp"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "vs2022-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "vs2022-x64",
+      "configuration": "Debug"
+    },
+    {
+      "name": "winamp-release",
+      "configurePreset": "vs2022-win32",
+      "configuration": "Release"
+    },
+    {
+      "name": "winamp-debug",
+      "configurePreset": "vs2022-win32",
+      "configuration": "Debug"
+    }
+  ]
+}

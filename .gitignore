@@ -6,3 +6,9 @@ Desktop.ini
 # REAPER / JSFX backup files
 *.jsfx-bak
 *.bak
+
+# Native build and release products
+native/build/
+native/build-winamp/
+dist/
+graphify-out/

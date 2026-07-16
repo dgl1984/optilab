@@ -1,5 +1,63 @@
 # Changelog
 
+## OptiLab Core v1.1.0
+
+This release keeps the established three-control JSFX design and adds a
+Winamp-compatible DSP plug-in for Windows. The Winamp plug-in is a native port
+of the same OptiLab Core processing design used by the REAPER JSFX, translated
+from JSFX into a small Windows DSP engine and wrapped in the classic 32-bit
+Winamp DSP/Effect interface.
+
+Existing JSFX users should expect the same simple workflow: **Mode**, **Input**,
+and **Auto-Adapt**. The sound has been refined, especially in Stream polish,
+with safer internal peak handling that still lets the final result play loudly
+near the output ceiling when the material supports it.
+
+### Processing updates
+
+- Updated Stream polish so difficult music and mixed program material get safer
+  internal peak handling without forcing the result to become quiet.
+- Added Producer-style hidden peak protection inside Core while keeping the
+  visible interface at three controls.
+- Reduced the hidden 6-band recombination clipping behavior so it cannot be
+  pushed into the harsh high settings used by some Producer presets.
+- Retuned Stream polish to use recovered headroom and finish closer to the
+  selected output ceiling instead of leaving unnecessary level unused.
+- Kept the output sample ceiling at the end of the chain. As before, later
+  sample-rate conversion or encoding can create new peaks outside Core.
+
+### For existing JSFX users
+
+- The plug-in is still named **OptiLab Core v1.1.0 (LanesAudio)** in REAPER.
+- No new controls were added.
+- Stream polish is the mode most likely to sound different: it should feel more
+  stable, more protected, and more confident near the ceiling.
+- Podcast Leveler and Smooth Limiter keep the same simple workflow and share
+  the improved final safety behavior where appropriate.
+
+### New Winamp-compatible DSP plug-in
+
+- Added a 32-bit classic Winamp DSP/Effect plug-in for Winamp and compatible
+  Windows broadcast hosts.
+- Added Podcast Leveler, Stream polish, and Smooth Limiter modes with the same
+  Input and Auto-Adapt controls as the JSFX.
+- Ported the Core processing from the JSFX design into a native Windows DSP so
+  Winamp-compatible hosts can use the same Core sound without REAPER.
+- Added an accessible configuration window built entirely from standard Windows
+  controls, with keyboard access keys, logical tab order, and native focus.
+- Added host-specific settings under the current Windows user so Winamp,
+  RadioBOSS, StationPlaylist Studio, and other hosts do not overwrite one
+  another's OptiLab settings.
+- Added mono and stereo support for 8, 16, 24, and 32-bit integer PCM.
+- Added LanesAudio company, product, and version metadata to the DLL.
+
+### JSFX
+
+- Updated the displayed version to v1.1.0 so all OptiLab Core formats share one
+  release number.
+- Kept the same three-control interface while applying the corrected Stream
+  polish and final peak handling.
+
 ## OptiLab Core v1.0.3
 
 This is an Auto-Adapt and speech-transition update for OptiLab Core. The plugin keeps the same simple three-control design: **Mode**, **Input**, and **Auto-Adapt**. No new controls were added.

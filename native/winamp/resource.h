@@ -1,0 +1,7 @@
+#pragma once
+
+#define IDD_OPTILAB_CONFIG 101
+#define IDC_MODE 1001
+#define IDC_INPUT_DRIVE 1002
+#define IDC_AUTO_ADAPT 1003
+#define IDC_RESTORE_DEFAULTS 1004

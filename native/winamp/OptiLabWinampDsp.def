@@ -1,0 +1,3 @@
+LIBRARY dsp_optilab_core
+EXPORTS
+    winampDSPGetHeader2
