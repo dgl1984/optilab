@@ -65,9 +65,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: optilab-core-winamp-dsp-x86
-          path: |
-            dist/*.zip
-            dist/*-SHA256.txt
+          path: dist/*.zip
           if-no-files-found: error
 
   release:
@@ -78,6 +76,9 @@ jobs:
       contents: write
 
     steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
       - name: Download tested release candidate
         uses: actions/download-artifact@v4
         with:
@@ -89,8 +90,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          Copy-Item -LiteralPath "Effects\optilab_core.jsfx" -Destination "dist\optilab_core.jsfx"
+          Copy-Item -LiteralPath "native\API.md" -Destination "dist\OptiLab-Core-$version-Native-API.md"
           $assets = Get-ChildItem ./dist -File | Select-Object -ExpandProperty FullName
-          gh release create $env:GITHUB_REF_NAME @assets `
-            --verify-tag `
-            --title "OptiLab Core $env:GITHUB_REF_NAME" `
-            --generate-notes
+          if (gh release view $env:GITHUB_REF_NAME *> $null) {
+            gh release upload $env:GITHUB_REF_NAME @assets --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME @assets `
+              --verify-tag `
+              --title "OptiLab Core $env:GITHUB_REF_NAME" `
+              --generate-notes
+          }

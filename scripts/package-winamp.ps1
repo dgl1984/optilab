@@ -14,10 +14,11 @@ if (-not $versionMatch.Success) {
 $version = $versionMatch.Groups['version'].Value
 $jsfx = Get-Content -Raw -LiteralPath "$repositoryRoot\Effects\optilab_core.jsfx"
 $changelog = Get-Content -Raw -LiteralPath "$repositoryRoot\CHANGELOG.md"
-if ($jsfx -notmatch "(?m)^// @version $([regex]::Escape($version))$") {
+$escapedVersion = [regex]::Escape($version)
+if ($jsfx -notmatch "(?m)^// @version $escapedVersion\r?$") {
     throw "The JSFX version does not match native version $version."
 }
-if ($changelog -notmatch "(?m)^## OptiLab Core v$([regex]::Escape($version))$") {
+if ($changelog -notmatch "(?m)^## OptiLab Core v$escapedVersion\r?$") {
     throw "CHANGELOG.md has no entry for version $version."
 }
 $buildRoot = (Resolve-Path $BuildDirectory).Path
