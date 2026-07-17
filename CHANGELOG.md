@@ -1,5 +1,19 @@
 # Changelog
 
+## OptiLab Core v1.1.2
+
+This release keeps the Winamp DSP sound and host calibration from v1.1.1, while
+making the settings-window meters opt-in for better screen-reader behavior.
+
+### Winamp-compatible DSP
+
+- Added a **Show visual meters** checkbox to the settings window.
+- Left visual meters off by default so screen readers do not announce changing
+  progress percentages unless the user explicitly enables them.
+- Kept simple text status fields for input peak, output peak, and recent
+  full-scale sample activity.
+- Kept the v1.1.1 Winamp Stream polish default of `+1.0 dB`.
+
 ## OptiLab Core v1.1.1
 
 This is a small Winamp DSP polish release. The REAPER JSFX is still the same

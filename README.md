@@ -39,18 +39,19 @@ important than an aggressive broadcast sound.
 Start gently. If the result becomes too flat, dense, or pushed, lower Input
 before changing everything else.
 
-## What is new in v1.1.1
+## What is new in v1.1.2
 
-Version 1.1.1 keeps the same simple REAPER JSFX interface and refines the
+Version 1.1.2 keeps the same simple REAPER JSFX interface and refines the
 Winamp-compatible DSP build for Windows.
 
 For existing JSFX users, there are no new controls. The JSFX carries the current
-release number, while the main v1.1.1 work is in the Winamp-compatible DSP.
+release number, while the main v1.1.2 work is in the Winamp-compatible DSP.
 
 The Winamp DSP now opens Stream polish at a gentler `+1.0 dB` Input drive
 starting point, which is a better fit for integer-PCM Winamp-compatible hosts.
-The settings window also adds simple live meters and text readouts for input
-peak, output peak, and recent full-scale samples.
+The settings window also has opt-in visual meters. They are off by default so
+screen readers do not announce constantly changing progress percentages unless
+the user explicitly enables them.
 
 ## Output ceiling and sample rates
 
@@ -70,7 +71,7 @@ that conversion.
 Release downloads are available from the repository's GitHub Releases page.
 
 - REAPER users need `optilab_core.jsfx`.
-- Winamp-compatible hosts need `OptiLab-Core-1.1.1-Winamp-DSP-x86.zip`.
+- Winamp-compatible hosts need `OptiLab-Core-1.1.2-Winamp-DSP-x86.zip`.
 
 ## REAPER installation
 
@@ -89,7 +90,7 @@ Winamp DSP plug-ins.
 1. Download and extract the Winamp DSP ZIP from the latest release.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
-4. Restart the host and select **OptiLab Core 1.1.1** in its DSP configuration.
+4. Restart the host and select **OptiLab Core 1.1.2** in its DSP configuration.
 
 Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
 require administrator approval. Other hosts choose their own plug-in folders.

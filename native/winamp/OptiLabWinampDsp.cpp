@@ -27,6 +27,7 @@ std::once_flag settingsLoadFlag;
 std::atomic<int> targetMode{0};
 std::atomic<int> targetInputTenths{35};
 std::atomic<int> targetAdaptPercent{0};
+std::atomic<int> targetVisualMeters{0};
 std::atomic<int> meterInputMilliDb{meterFloorMilliDb};
 std::atomic<int> meterOutputMilliDb{meterFloorMilliDb};
 std::atomic<int> meterFullScaleSamples{0};
@@ -35,6 +36,7 @@ struct DialogSettings {
     int mode = 0;
     int inputTenths = 35;
     int adaptPercent = 0;
+    bool visualMeters = false;
 };
 
 struct ProcessorState {
@@ -90,6 +92,11 @@ void loadSettings() {
                      nullptr, &value, &size) == ERROR_SUCCESS && value <= 100) {
         targetAdaptPercent.store(static_cast<int>(value), std::memory_order_relaxed);
     }
+    size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER, registryPath, L"VisualMeters", RRF_RT_REG_DWORD,
+                     nullptr, &value, &size) == ERROR_SUCCESS) {
+        targetVisualMeters.store(value ? 1 : 0, std::memory_order_relaxed);
+    }
 }
 
 void ensureSettingsLoaded() {
@@ -105,12 +112,15 @@ void saveSettings(const DialogSettings& settings) {
     const DWORD mode = static_cast<DWORD>(settings.mode);
     const DWORD input = static_cast<DWORD>(settings.inputTenths + 120);
     const DWORD adapt = static_cast<DWORD>(settings.adaptPercent);
+    const DWORD visualMeters = settings.visualMeters ? 1u : 0u;
     RegSetValueExW(key, L"Mode", 0, REG_DWORD,
                    reinterpret_cast<const BYTE*>(&mode), sizeof(mode));
     RegSetValueExW(key, L"InputTenths", 0, REG_DWORD,
                    reinterpret_cast<const BYTE*>(&input), sizeof(input));
     RegSetValueExW(key, L"AdaptPercent", 0, REG_DWORD,
                    reinterpret_cast<const BYTE*>(&adapt), sizeof(adapt));
+    RegSetValueExW(key, L"VisualMeters", 0, REG_DWORD,
+                   reinterpret_cast<const BYTE*>(&visualMeters), sizeof(visualMeters));
     RegCloseKey(key);
 }
 
@@ -173,7 +183,26 @@ int meterPosition(int milliDb) noexcept {
     return std::clamp(milliDb - meterFloorMilliDb, 0, -meterFloorMilliDb);
 }
 
+void setMeterVisibility(HWND dialog, bool enabled) {
+    ShowWindow(GetDlgItem(dialog, IDC_INPUT_METER), enabled ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(dialog, IDC_OUTPUT_METER), enabled ? SW_SHOW : SW_HIDE);
+}
+
+void setMetersOffText(HWND dialog) {
+    SetDlgItemTextW(dialog, IDC_INPUT_PEAK, L"Input peak: visual meters off");
+    SetDlgItemTextW(dialog, IDC_OUTPUT_PEAK, L"Output peak: visual meters off");
+    SetDlgItemTextW(dialog, IDC_FULL_SCALE, L"Full scale: visual meters off");
+    SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETPOS, 0, 0);
+    SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_SETPOS, 0, 0);
+}
+
 void updateMeters(HWND dialog) {
+    const auto* settings = reinterpret_cast<DialogSettings*>(GetWindowLongPtrW(dialog, DWLP_USER));
+    if (!settings || !settings->visualMeters) {
+        setMetersOffText(dialog);
+        return;
+    }
+
     const int input = meterInputMilliDb.exchange(meterFloorMilliDb, std::memory_order_relaxed);
     const int output = meterOutputMilliDb.exchange(meterFloorMilliDb, std::memory_order_relaxed);
     const int fullScale = meterFullScaleSamples.exchange(0, std::memory_order_relaxed);
@@ -202,10 +231,12 @@ void populateDialog(HWND dialog, DialogSettings& settings) {
     SendMessageW(mode, CB_SETCURSEL, static_cast<WPARAM>(settings.mode), 0);
     setInputText(dialog, settings.inputTenths);
     SetDlgItemInt(dialog, IDC_AUTO_ADAPT, static_cast<UINT>(settings.adaptPercent), FALSE);
+    CheckDlgButton(dialog, IDC_VISUAL_METERS, settings.visualMeters ? BST_CHECKED : BST_UNCHECKED);
     SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETRANGE32, 0,
                         static_cast<LPARAM>(-meterFloorMilliDb));
     SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_SETRANGE32, 0,
                         static_cast<LPARAM>(-meterFloorMilliDb));
+    setMeterVisibility(dialog, settings.visualMeters);
     updateMeters(dialog);
 }
 
@@ -267,9 +298,19 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         settings->mode = 0;
         settings->inputTenths = 35;
         settings->adaptPercent = 0;
+        settings->visualMeters = false;
         SendDlgItemMessageW(dialog, IDC_MODE, CB_SETCURSEL, 0, 0);
         setInputText(dialog, settings->inputTenths);
         SetDlgItemInt(dialog, IDC_AUTO_ADAPT, 0, FALSE);
+        CheckDlgButton(dialog, IDC_VISUAL_METERS, BST_UNCHECKED);
+        setMeterVisibility(dialog, false);
+        updateMeters(dialog);
+        return TRUE;
+    }
+    if (control == IDC_VISUAL_METERS && HIWORD(wParam) == BN_CLICKED) {
+        settings->visualMeters = IsDlgButtonChecked(dialog, IDC_VISUAL_METERS) == BST_CHECKED;
+        setMeterVisibility(dialog, settings->visualMeters);
+        updateMeters(dialog);
         return TRUE;
     }
     if (control == IDOK) {
@@ -282,6 +323,7 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         settings->mode = static_cast<int>(SendDlgItemMessageW(dialog, IDC_MODE, CB_GETCURSEL, 0, 0));
         settings->inputTenths = static_cast<int>(std::lround(input * 10.0));
         settings->adaptPercent = static_cast<int>(std::lround(adapt));
+        settings->visualMeters = IsDlgButtonChecked(dialog, IDC_VISUAL_METERS) == BST_CHECKED;
         EndDialog(dialog, IDOK);
         return TRUE;
     }
@@ -298,6 +340,7 @@ void configure(WinampDspModule* module) {
         targetMode.load(std::memory_order_relaxed),
         targetInputTenths.load(std::memory_order_relaxed),
         targetAdaptPercent.load(std::memory_order_relaxed),
+        targetVisualMeters.load(std::memory_order_relaxed) != 0,
     };
     const HWND parent = module ? module->hwndParent : nullptr;
     if (DialogBoxParamW(instanceHandle, MAKEINTRESOURCEW(IDD_OPTILAB_CONFIG), parent,
@@ -305,6 +348,7 @@ void configure(WinampDspModule* module) {
         targetMode.store(settings.mode, std::memory_order_relaxed);
         targetInputTenths.store(settings.inputTenths, std::memory_order_relaxed);
         targetAdaptPercent.store(settings.adaptPercent, std::memory_order_relaxed);
+        targetVisualMeters.store(settings.visualMeters ? 1 : 0, std::memory_order_relaxed);
         saveSettings(settings);
     }
 }
