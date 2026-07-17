@@ -94,7 +94,8 @@ jobs:
           Copy-Item -LiteralPath "Effects\optilab_core.jsfx" -Destination "dist\optilab_core.jsfx"
           Copy-Item -LiteralPath "native\API.md" -Destination "dist\OptiLab-Core-$version-Native-API.md"
           $assets = Get-ChildItem ./dist -File | Select-Object -ExpandProperty FullName
-          if (gh release view $env:GITHUB_REF_NAME *> $null) {
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -eq 0) {
             gh release upload $env:GITHUB_REF_NAME @assets --clobber
           } else {
             gh release create $env:GITHUB_REF_NAME @assets `
