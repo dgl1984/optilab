@@ -4,6 +4,8 @@
 #include "WinampPcm.h"
 #include "resource.h"
 
+#include <commctrl.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -16,12 +18,18 @@
 namespace {
 
 constexpr std::size_t scratchFrames = 1024;
+constexpr UINT_PTR meterTimerId = 1;
+constexpr UINT meterTimerMs = 150;
+constexpr int meterFloorMilliDb = -120000;
 
 HINSTANCE instanceHandle = nullptr;
 std::once_flag settingsLoadFlag;
 std::atomic<int> targetMode{0};
 std::atomic<int> targetInputTenths{35};
 std::atomic<int> targetAdaptPercent{0};
+std::atomic<int> meterInputMilliDb{meterFloorMilliDb};
+std::atomic<int> meterOutputMilliDb{meterFloorMilliDb};
+std::atomic<int> meterFullScaleSamples{0};
 
 struct DialogSettings {
     int mode = 0;
@@ -60,7 +68,7 @@ const wchar_t* settingsRegistryPath() noexcept {
 }
 
 int defaultInputTenths(int mode) noexcept {
-    return mode == 0 ? 35 : mode == 1 ? 45 : 0;
+    return mode == 0 ? 35 : mode == 1 ? 10 : 0;
 }
 
 void loadSettings() {
@@ -112,6 +120,80 @@ void setInputText(HWND dialog, int inputTenths) {
     SetDlgItemTextW(dialog, IDC_INPUT_DRIVE, text);
 }
 
+int peakToMilliDb(double peak) noexcept {
+    if (!std::isfinite(peak) || peak <= 0.000001) {
+        return meterFloorMilliDb;
+    }
+    return static_cast<int>(std::lround(20000.0 * std::log10(std::min(peak, 1.0))));
+}
+
+void publishPeak(std::atomic<int>& target, int value) noexcept {
+    int current = target.load(std::memory_order_relaxed);
+    while (value > current &&
+           !target.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
+    }
+}
+
+double scratchPeak(const float* samples, std::size_t count) noexcept {
+    double peak = 0.0;
+    for (std::size_t index = 0; index < count; ++index) {
+        const float value = samples[index];
+        if (std::isfinite(value)) {
+            peak = std::max(peak, std::abs(static_cast<double>(value)));
+        }
+    }
+    return peak;
+}
+
+int fullScaleSamples(const float* samples, std::size_t count) noexcept {
+    int result = 0;
+    for (std::size_t index = 0; index < count; ++index) {
+        const float value = samples[index];
+        if (std::isfinite(value) && std::abs(value) >= 0.999) {
+            ++result;
+        }
+    }
+    return result;
+}
+
+void setPeakText(HWND dialog, int control, const wchar_t* label, int milliDb) {
+    wchar_t text[80]{};
+    if (milliDb <= meterFloorMilliDb) {
+        std::swprintf(text, std::size(text), L"%ls: no signal", label);
+    } else {
+        std::swprintf(text, std::size(text), L"%ls: %.1f dBFS", label, milliDb / 1000.0);
+    }
+    SetDlgItemTextW(dialog, control, text);
+}
+
+int meterPosition(int milliDb) noexcept {
+    if (milliDb <= meterFloorMilliDb) {
+        return 0;
+    }
+    return std::clamp(milliDb - meterFloorMilliDb, 0, -meterFloorMilliDb);
+}
+
+void updateMeters(HWND dialog) {
+    const int input = meterInputMilliDb.exchange(meterFloorMilliDb, std::memory_order_relaxed);
+    const int output = meterOutputMilliDb.exchange(meterFloorMilliDb, std::memory_order_relaxed);
+    const int fullScale = meterFullScaleSamples.exchange(0, std::memory_order_relaxed);
+
+    setPeakText(dialog, IDC_INPUT_PEAK, L"Input peak", input);
+    setPeakText(dialog, IDC_OUTPUT_PEAK, L"Output peak", output);
+    SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETPOS,
+                        static_cast<WPARAM>(meterPosition(input)), 0);
+    SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_SETPOS,
+                        static_cast<WPARAM>(meterPosition(output)), 0);
+
+    wchar_t text[80]{};
+    if (fullScale > 0) {
+        std::swprintf(text, std::size(text), L"Full scale: %d recent samples", fullScale);
+    } else {
+        std::swprintf(text, std::size(text), L"Full scale: none");
+    }
+    SetDlgItemTextW(dialog, IDC_FULL_SCALE, text);
+}
+
 void populateDialog(HWND dialog, DialogSettings& settings) {
     HWND mode = GetDlgItem(dialog, IDC_MODE);
     SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Podcast Leveler"));
@@ -120,6 +202,11 @@ void populateDialog(HWND dialog, DialogSettings& settings) {
     SendMessageW(mode, CB_SETCURSEL, static_cast<WPARAM>(settings.mode), 0);
     setInputText(dialog, settings.inputTenths);
     SetDlgItemInt(dialog, IDC_AUTO_ADAPT, static_cast<UINT>(settings.adaptPercent), FALSE);
+    SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETRANGE32, 0,
+                        static_cast<LPARAM>(-meterFloorMilliDb));
+    SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_SETRANGE32, 0,
+                        static_cast<LPARAM>(-meterFloorMilliDb));
+    updateMeters(dialog);
 }
 
 bool parseNumber(HWND dialog, int control, double minimum, double maximum,
@@ -151,7 +238,16 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         settings = reinterpret_cast<DialogSettings*>(lParam);
         SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(settings));
         populateDialog(dialog, *settings);
+        SetTimer(dialog, meterTimerId, meterTimerMs, nullptr);
         return TRUE;
+    }
+    if (message == WM_TIMER && wParam == meterTimerId) {
+        updateMeters(dialog);
+        return TRUE;
+    }
+    if (message == WM_DESTROY) {
+        KillTimer(dialog, meterTimerId);
+        return FALSE;
     }
     if (message != WM_COMMAND || !settings) {
         return FALSE;
@@ -273,7 +369,15 @@ int modifySamples(WinampDspModule* module, short* samples, int frames, int bitsP
             optilab::winamp::decodeInterleaved(blockBytes, block, channels, bitsPerSample,
                                                 state->scratch.data());
         }
+        const double inputPeak = scratchPeak(state->scratch.data(), blockSamples);
         state->core.processInterleaved(state->scratch.data(), block, static_cast<std::size_t>(channels));
+        const double outputPeak = scratchPeak(state->scratch.data(), blockSamples);
+        publishPeak(meterInputMilliDb, peakToMilliDb(inputPeak));
+        publishPeak(meterOutputMilliDb, peakToMilliDb(outputPeak));
+        const int fullScale = fullScaleSamples(state->scratch.data(), blockSamples);
+        if (fullScale > 0) {
+            meterFullScaleSamples.fetch_add(fullScale, std::memory_order_relaxed);
+        }
         if (bitsPerSample == 16) {
             auto* blockPcm = samples + offset * static_cast<std::size_t>(channels);
             optilab::winamp::encodeInt16(state->scratch.data(), blockSamples, blockPcm);
@@ -328,6 +432,8 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         instanceHandle = instance;
         module.hDllInstance = instance;
+        INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_PROGRESS_CLASS};
+        InitCommonControlsEx(&controls);
         DisableThreadLibraryCalls(instance);
     }
     return TRUE;

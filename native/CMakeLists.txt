@@ -4,7 +4,7 @@ if (POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
 
-project(optilab_core VERSION 1.1.0 LANGUAGES CXX)
+project(optilab_core VERSION 1.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -65,6 +65,7 @@ if (MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 4)
         optilab-core
         optilab-winamp-pcm
         advapi32
+        comctl32
         user32
         version
     )

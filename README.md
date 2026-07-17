@@ -39,21 +39,18 @@ important than an aggressive broadcast sound.
 Start gently. If the result becomes too flat, dense, or pushed, lower Input
 before changing everything else.
 
-## What is new in v1.1.0
+## What is new in v1.1.1
 
-Version 1.1.0 keeps the same simple REAPER JSFX interface and adds a matching
-Winamp-compatible DSP plug-in for Windows.
+Version 1.1.1 keeps the same simple REAPER JSFX interface and refines the
+Winamp-compatible DSP build for Windows.
 
-For existing JSFX users, the biggest change is internal: Stream polish now uses
-safer peak handling while still aiming for a finished, full-level result near
-the output ceiling when the material calls for it. Auto-Adapt should feel more
-controlled on difficult music and mixed program material instead of getting
-quieter while still hitting peaks.
+For existing JSFX users, there are no new controls. The JSFX carries the current
+release number, while the main v1.1.1 work is in the Winamp-compatible DSP.
 
-The Winamp DSP is a native Windows port of the same OptiLab Core processing
-design used by the JSFX. It was translated from the JSFX into a small C++ audio
-engine and wrapped in the classic 32-bit Winamp DSP/Effect interface, with the
-same three controls: Mode, Input drive, and Auto-adapt.
+The Winamp DSP now opens Stream polish at a gentler `+1.0 dB` Input drive
+starting point, which is a better fit for integer-PCM Winamp-compatible hosts.
+The settings window also adds simple live meters and text readouts for input
+peak, output peak, and recent full-scale samples.
 
 ## Output ceiling and sample rates
 
@@ -73,7 +70,7 @@ that conversion.
 Release downloads are available from the repository's GitHub Releases page.
 
 - REAPER users need `optilab_core.jsfx`.
-- Winamp-compatible hosts need `OptiLab-Core-1.1.0-Winamp-DSP-x86.zip`.
+- Winamp-compatible hosts need `OptiLab-Core-1.1.1-Winamp-DSP-x86.zip`.
 
 ## REAPER installation
 
@@ -92,7 +89,7 @@ Winamp DSP plug-ins.
 1. Download and extract the Winamp DSP ZIP from the latest release.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
-4. Restart the host and select **OptiLab Core 1.1.0** in its DSP configuration.
+4. Restart the host and select **OptiLab Core 1.1.1** in its DSP configuration.
 
 Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
 require administrator approval. Other hosts choose their own plug-in folders.
@@ -102,8 +99,8 @@ normal focus indication, and screen-reader-friendly labels. See
 [`native/WINAMP.md`](native/WINAMP.md) for complete details and troubleshooting.
 
 Use the Winamp DSP the same way you use the JSFX: choose a mode, set Input so
-the processor is working without sounding overdriven, then raise Auto-adapt only
-if you want more automatic leveling, tone balancing, and protection.
+the processor is working without sounding overdriven, then raise Auto-adapt if
+you want more automatic leveling, tone balancing, and protection.
 
 ## Donations and contact
 

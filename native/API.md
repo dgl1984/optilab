@@ -1,12 +1,12 @@
 # OptiLab Core Native API
 
-OptiLab Core v1.1.0 includes a framework-independent C++17 static library named
+OptiLab Core v1.1.1 includes a framework-independent C++17 static library named
 `optilab-core`. It is the same processing engine used by the Winamp DSP wrapper.
 
 This is a C++ API, not a stable C ABI. If you need to call OptiLab Core from C,
 Rust, C#, Python, or another language, wrap this C++ class in a small adapter
 owned by your project. A stable exported C API may be added in a later release,
-but v1.1.0 does not promise one.
+but v1.1.1 does not promise one.
 
 ## Files
 
@@ -154,7 +154,7 @@ and lookahead stages will not settle normally.
 
 ## Versioning note
 
-The v1.1.0 C++ API is small and practical, but it should not yet be treated as a
+The v1.1.1 C++ API is small and practical, but it should not yet be treated as a
 long-term binary compatibility promise. Prefer rebuilding against the matching
 release source rather than mixing headers and libraries from different OptiLab
 Core versions.

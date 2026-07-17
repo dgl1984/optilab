@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <commctrl.h>
 #include "OptiLabVersion.h"
 #include "resource.h"
 
@@ -35,7 +36,7 @@ BEGIN
     END
 END
 
-IDD_OPTILAB_CONFIG DIALOGEX 0, 0, 252, 126
+IDD_OPTILAB_CONFIG DIALOGEX 0, 0, 252, 202
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "OptiLab Core Settings"
 FONT 9, "Segoe UI"
@@ -49,7 +50,13 @@ BEGIN
     LTEXT           "&Auto-adapt (%):", -1, 17, 66, 58, 10
     EDITTEXT        IDC_AUTO_ADAPT, 78, 63, 52, 14, ES_AUTOHSCROLL | WS_TABSTOP
     LTEXT           "0 to 100", -1, 137, 66, 48, 10
-    PUSHBUTTON      "&Restore Defaults", IDC_RESTORE_DEFAULTS, 7, 94, 78, 18, WS_TABSTOP
-    DEFPUSHBUTTON   "OK", IDOK, 142, 94, 50, 18, WS_TABSTOP
-    PUSHBUTTON      "Cancel", IDCANCEL, 195, 94, 50, 18, WS_TABSTOP
+    GROUPBOX        "Meters", -1, 7, 90, 238, 74
+    LTEXT           "Input peak: no signal", IDC_INPUT_PEAK, 17, 106, 212, 10
+    CONTROL         "", IDC_INPUT_METER, PROGRESS_CLASS, PBS_SMOOTH | WS_VISIBLE, 17, 119, 212, 8
+    LTEXT           "Output peak: no signal", IDC_OUTPUT_PEAK, 17, 132, 212, 10
+    CONTROL         "", IDC_OUTPUT_METER, PROGRESS_CLASS, PBS_SMOOTH | WS_VISIBLE, 17, 145, 212, 8
+    LTEXT           "Full scale: none", IDC_FULL_SCALE, 17, 155, 170, 10
+    PUSHBUTTON      "&Restore Defaults", IDC_RESTORE_DEFAULTS, 7, 173, 78, 18, WS_TABSTOP
+    DEFPUSHBUTTON   "OK", IDOK, 142, 173, 50, 18, WS_TABSTOP
+    PUSHBUTTON      "Cancel", IDCANCEL, 195, 173, 50, 18, WS_TABSTOP
 END

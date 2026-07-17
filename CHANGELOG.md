@@ -1,5 +1,28 @@
 # Changelog
 
+## OptiLab Core v1.1.1
+
+This is a small Winamp DSP polish release. The REAPER JSFX is still the same
+three-control Core processor, with the displayed release number updated so the
+downloadable JSFX and Winamp build share one version.
+
+### Winamp-compatible DSP
+
+- Added live standard Windows meters to the settings window: input peak, output
+  peak, and a recent full-scale sample indicator.
+- Kept the metering accessible by pairing the meter bars with plain text
+  readouts instead of relying on custom graphics.
+- Lowered the Winamp Stream polish starting Input drive to `+1.0 dB`. This is
+  better matched to integer-PCM Winamp-compatible hosts such as Winamp and
+  RadioBOSS, where the earlier `+4.5 dB` starting point could feel pinned or
+  clipped.
+- Existing saved per-host settings are still respected.
+
+### Build and release
+
+- Pinned the GitHub Actions Windows workflow to the VS2022 runner image.
+- Skipped native CI for Markdown-only pushes.
+
 ## OptiLab Core v1.1.0
 
 This release keeps the established three-control JSFX design and adds a
