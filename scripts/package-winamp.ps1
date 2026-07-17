@@ -52,5 +52,12 @@ if (-not (Test-Path -LiteralPath $archive)) {
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash
 "$hash  $([IO.Path]::GetFileName($archive))" | Set-Content -LiteralPath $checksums -Encoding ascii
 
+# Standalone JSFX SHA-256 for REAPER-only users.
+$jsfxSrc = Join-Path $repositoryRoot "Effects\optilab_core.jsfx"
+$jsfxHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $jsfxSrc).Hash
+$jsfxChecksums = Join-Path $outputRoot "OptiLab-Core-$version-JSFX-SHA256.txt"
+"$jsfxHash  optilab_core.jsfx" | Set-Content -LiteralPath $jsfxChecksums -Encoding ascii
+
 Write-Output $archive
 Write-Output $checksums
+Write-Output $jsfxChecksums
