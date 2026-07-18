@@ -23,6 +23,10 @@ docs/                        Cross-format testing and repository documentation
 wrappers must use `native/core` rather than copying the DSP implementation.
 Future native formats belong under `native/plugins/<format>/`.
 
+GitHub's automatically generated source archives contain all tracked source,
+tests, packaging and installation scripts, CI configuration, vendored SDK
+headers and licenses, and project documentation for the tagged version.
+
 ## Generated And Local Data
 
 The following directories are intentionally ignored by Git:
@@ -38,6 +42,9 @@ graphify-out/                Local code graph, cache, and reports
 Installed test plug-ins live outside the repository in their host-standard
 locations. They are reproduced from a build using scripts such as
 `scripts/install-clap.ps1`; installed binaries are never treated as source.
+Release ZIP files and the standalone JSFX download are published separately as
+GitHub Release assets. Local Graphify output is analysis data, not project
+source, and is never included in a source archive or release package.
 
 ## Ownership Rules
 

@@ -1,9 +1,9 @@
 # OptiLab Core
 
-OptiLab Core is a free audio processor from LanesAudio for leveling, density,
-tone control, saturation, limiting, and general program polish. It is available
-as a JSFX for REAPER, a 64-bit Windows CLAP plug-in, and a classic
-Winamp-compatible DSP plug-in for Windows.
+OptiLab Core is a free, accessible broadcast and mastering audio processor from
+LanesAudio. It combines leveling, density, tone control, saturation, limiting,
+and general program polish. It is available as a JSFX for REAPER, a 64-bit
+Windows CLAP plug-in, and a classic Winamp-compatible DSP plug-in for Windows.
 
 The processor has three main controls: **Mode**, **Input**, and **Auto-Adapt**.
 That simplicity is intentional. OptiLab Core is designed to reach a useful,
