@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure Win32
         run: cmake --preset vs2022-win32 -S native
@@ -86,7 +86,7 @@ jobs:
         run: ./scripts/package-clap.ps1
 
       - name: Upload tested Winamp release candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: optilab-core-winamp-dsp-x86
           path: |
@@ -97,7 +97,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload tested CLAP candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: optilab-core-clap-x64
           path: |
@@ -114,16 +114,16 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download tested release candidate
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: optilab-core-winamp-dsp-x86
           path: dist
 
       - name: Download tested CLAP candidate
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: optilab-core-clap-x64
           path: dist
