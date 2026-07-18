@@ -113,7 +113,7 @@ normal focus indication, and screen-reader-friendly labels. See
 [`native/WINAMP.md`](native/WINAMP.md) for complete details and troubleshooting.
 
 Use the Winamp DSP the same way you use the JSFX: choose a mode, set Input so
-the processor is working without sounding overdriven, then raise Auto-adapt if
+the processor is working without sounding overdriven, then raise Auto-Adapt if
 you want more automatic leveling, tone balancing, and protection.
 
 ## Development Layout
