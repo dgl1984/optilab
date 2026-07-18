@@ -134,6 +134,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $escapedVersion = [regex]::Escape($version)
+          $changelog = Get-Content -Raw -LiteralPath "CHANGELOG.md"
+          $releaseNotesMatch = [regex]::Match(
+            $changelog,
+            "(?ms)^## OptiLab Core v$escapedVersion\r?\n\r?\n(?<notes>.*?)(?=^## OptiLab Core v|\z)"
+          )
+          if (-not $releaseNotesMatch.Success) {
+            throw "CHANGELOG.md has no complete release notes for version $version."
+          }
+          $releaseNotes = $releaseNotesMatch.Groups["notes"].Value.Trim()
+          $releaseNotesPath = Join-Path (Resolve-Path "dist").Path "release-notes.md"
+          Set-Content -LiteralPath $releaseNotesPath -Value $releaseNotes -Encoding utf8
           Copy-Item -LiteralPath "Effects\optilab_core.jsfx" -Destination "dist\optilab_core.jsfx"
           $assets = @(
             (Resolve-Path "dist\optilab_core.jsfx").Path
@@ -143,9 +155,12 @@ jobs:
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $env:GITHUB_REF_NAME @assets --clobber
+            gh release edit $env:GITHUB_REF_NAME `
+              --title "OptiLab Core $env:GITHUB_REF_NAME" `
+              --notes-file $releaseNotesPath
           } else {
             gh release create $env:GITHUB_REF_NAME @assets `
               --verify-tag `
               --title "OptiLab Core $env:GITHUB_REF_NAME" `
-              --generate-notes
+              --notes-file $releaseNotesPath
           }
