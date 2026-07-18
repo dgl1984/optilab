@@ -1,10 +1,14 @@
 // @description OptiLab Core
-// @version 1.1.2
+// @version 1.2.0
 // @author LanesAudio
 // @about
 //   OptiLab Core is a JSFX audio processor for REAPER.
 //   It brings leveling, density, tone control, saturation, and limiting together.
 // @changelog
+//   v1.2.0
+//   - Fixed the user-reported short fade-in at the beginning of playback.
+//   - Added the matching accessible 64-bit Windows CLAP release.
+//   - Preserved the established three-control workflow and processing behavior.
 //   v1.1.2
 //   - Added opt-in Winamp visual meters, off by default for accessibility.
 //   v1.1.1
@@ -33,7 +37,7 @@
 // @provides
 //   optilab_core.jsfx
 
-desc:OptiLab Core v1.1.2 (LanesAudio)
+desc:OptiLab Core v1.2.0 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
@@ -55,18 +59,31 @@ final_threshold_drive_s = 1;
 
 gui_peak_in_l_sample = 0;
 gui_peak_in_r_sample = 0;
-gui_peak_out_l_sample = 0;
-gui_peak_out_r_sample = 0;
 gui_peak_in_l = 0;
 gui_peak_in_r = 0;
-gui_peak_out_l = 0;
-gui_peak_out_r = 0;
 gui_peak_hold_in = 20000;
-gui_peak_hold_out = 20001;
 20000[] = -60;
-20001[] = -60;
+gui_gr_agc = 0;
+gui_gr_density = 0;
+gui_gr_final = 0;
 gui_active_slider = -1;
 gui_last_mouse_down = 0;
+gui_theme_bg = 0x101316;
+gui_theme_panel = 0x181D22;
+gui_theme_accent = 0x14B8D4;
+gui_theme_text = 0xE5EDF4;
+gui_theme_text_muted = 0xA8B4C2;
+gui_theme_border = 0x465466;
+gui_theme_activity = 0xF97316;
+gui_theme_warning = 0xFACC15;
+gui_theme_safe = 0x22C55E;
+gui_theme_danger = 0xEF4444;
+
+agc_low_eff_gain = 1;
+agc_high_eff_gain = 1;
+g1 = g2 = g3 = g4 = g5 = g6 = 1;
+dynamic_clip_gain = 1;
+pre_tgain = 1;
 
 fcs_buf_len = 512;
 fcs_buf_l = 0;
@@ -630,7 +647,6 @@ core_mode == 0 ? (
 processor_mode = core_mode == 2 ? 1 : 0;
 
 core_last_mode = core_mode;
-core_initial_apply = 0;
 
 input_trim_db = clamp(input_drive_db, -12, 18);
 
@@ -1041,6 +1057,11 @@ top_filter_mode == 1 ? (
 );
 
 fcs_residue_a = 1 - exp(-2*$pi*12000/srate);
+
+core_initial_apply ? (
+  reset_dynamic_state();
+  core_initial_apply = 0;
+);
 
 @block
 pdc_delay != path_delay ? pdc_delay = path_delay;
@@ -1849,40 +1870,36 @@ spl1 = normal_out_r;
 
 gui_peak_in_l_sample = max(gui_peak_in_l_sample, abs(input_section_in_l));
 gui_peak_in_r_sample = max(gui_peak_in_r_sample, abs(input_section_in_r));
-gui_peak_out_l_sample = max(gui_peak_out_l_sample, abs(spl0));
-gui_peak_out_r_sample = max(gui_peak_out_r_sample, abs(spl1));
 
 
-@gfx 620 262
+@gfx 600 300
 
-gfx_setfont(1, "Arial", 11);
-gfx_setfont(2, "Arial", 11, 'b');
-gfx_setfont(3, "Arial", 9);
-gfx_setfont(4, "Arial", 18, 'b');
-gfx_setfont(5, "Arial", 10);
-gfx_setfont(6, "Arial", 24, 'b');
+gui_scale = min(gfx_w / 600, gfx_h / 300);
+gui_scale = max(gui_scale, 0.25);
+gui_scale = min(gui_scale, 2);
+gui_layout_w = gfx_w / gui_scale;
+gui_layout_h = gfx_h / gui_scale;
+gui_dx = 0;
+gui_dy = 0;
 
-function gui_color(r g b a)
+gfx_setfont(1, "Arial", max(5, floor(11 * gui_scale)));
+gfx_setfont(2, "Arial", max(5, floor(11 * gui_scale)), 'b');
+gfx_setfont(3, "Arial", max(5, floor(9 * gui_scale)));
+gfx_setfont(4, "Arial", max(8, floor(16 * gui_scale)), 'b');
+gfx_setfont(5, "Arial", max(5, floor(10 * gui_scale)));
+gfx_setfont(6, "Arial", max(5, floor(9 * gui_scale)), 'b');
+
+function set_hex_color(hex a) local(r g b)
 (
+  r = ((hex >> 16) & 255) / 255;
+  g = ((hex >> 8) & 255) / 255;
+  b = (hex & 255) / 255;
   gfx_r = r; gfx_g = g; gfx_b = b; gfx_a = a;
 );
 
-function gui_fill(x y w h r g b a)
-(
-  gui_color(r,g,b,a);
-  gfx_rect(x,y,w,h,1);
-);
-
-function gui_frame(x y w h r g b a)
-(
-  gui_color(r,g,b,a);
-  gfx_rect(x,y,w,h,0);
-);
-
-function gui_hit(x y w h)
-(
-  mouse_x >= x && mouse_x <= x+w && mouse_y >= y && mouse_y <= y+h;
-);
+function ui_x(v) ( gui_dx + v * gui_scale; );
+function ui_y(v) ( gui_dy + v * gui_scale; );
+function ui_s(v) ( v * gui_scale; );
 
 function core_mode_name(dest)
 (
@@ -1891,37 +1908,35 @@ function core_mode_name(dest)
                    strcpy(dest, "Smooth Limiter");
 );
 
-function gui_draw_mode(x y w h) local(hover mouse_down choice accent_r accent_g accent_b)
+function gui_draw_mode(x y w h) local(hover mouse_down choice text_w text_h)
 (
-  hover = gui_hit(x,y,w,h);
+  x = ui_x(x);
+  y = ui_y(y);
+  w *= gui_scale;
+  h *= gui_scale;
+  hover = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
   mouse_down = mouse_cap & 1;
 
-  // Mode-specific accent color
-  core_mode == 0 ? ( accent_r = 0.82; accent_g = 0.65; accent_b = 0.32; ) :  // Podcast: warm amber
-  core_mode == 1 ? ( accent_r = 0.40; accent_g = 0.62; accent_b = 0.88; ) :  // Stream: cool blue
-                   ( accent_r = 0.58; accent_g = 0.62; accent_b = 0.68; );   // Limiter: muted silver
-
-  gui_fill(x,y,w,h, 0.105,0.125,0.155,1);
-  hover ? (
-    gui_frame(x,y,w,h, accent_r, accent_g, accent_b, 1);
-  ) : (
-    gui_frame(x,y,w,h, accent_r * 0.55, accent_g * 0.55, accent_b * 0.55, 1);
-  );
+  set_hex_color(hover ? gui_theme_panel : gui_theme_bg, 1);
+  gfx_rect(x, y, w, h, 1);
+  set_hex_color(hover ? gui_theme_accent : gui_theme_border, 1);
+  gfx_rect(x, y, w, h, 0);
 
   core_mode_name(#core_mode_text);
-  gui_color(0.88,0.91,0.96,1);
+  set_hex_color(gui_theme_text, 1);
   gfx_setfont(2);
-  gfx_measurestr(#core_mode_text, mode_w, mode_h);
-  gfx_x = x + 14;
-  gfx_y = y + (h - mode_h) * 0.5;
+  gfx_measurestr(#core_mode_text, text_w, text_h);
+  gfx_x = x + ui_s(12);
+  gfx_y = y + (h - text_h) * 0.5;
   gfx_drawstr(#core_mode_text);
 
-  gui_color(accent_r * 0.85, accent_g * 0.85, accent_b * 0.85, 1);
-  gfx_x = x + w - 20;
-  gfx_y = y + h * 0.5 - 3;
-  gfx_line(gfx_x, gfx_y, gfx_x + 5, gfx_y + 5, 1);
-  gfx_line(gfx_x + 5, gfx_y + 5, gfx_x + 10, gfx_y, 1);
+  set_hex_color(gui_theme_accent, 1);
+  gfx_x = x + w - ui_s(19);
+  gfx_y = y + h * 0.5 - ui_s(3);
+  gfx_line(gfx_x, gfx_y, gfx_x + ui_s(4), gfx_y + ui_s(4), max(1, floor(gui_scale)));
+  gfx_line(gfx_x + ui_s(4), gfx_y + ui_s(4), gfx_x + ui_s(8), gfx_y, max(1, floor(gui_scale)));
 
+  hover ? sprintf(#gui_hover_info, "Mode | %s", #core_mode_text);
   hover && mouse_down && !gui_last_mouse_down ? (
     gfx_x = x;
     gfx_y = y + h;
@@ -1933,17 +1948,20 @@ function gui_draw_mode(x y w h) local(hover mouse_down choice accent_r accent_g 
   );
 );
 
-function gui_draw_slider(x y w slider_idx label min_val max_val default_val unit) local(track_y hover mouse_down val pct new_val fill_w handle_x value_w value_h)
+function gui_draw_slider(x y w slider_idx label min_val max_val) local(track_y hover mouse_down val pct new_val fill_w handle_x value_w value_h)
 (
-  track_y = y + 28;
-  hover = gui_hit(x, y, w, 48);
+  x = ui_x(x);
+  y = ui_y(y);
+  w *= gui_scale;
+  track_y = y + ui_s(25);
+  hover = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + ui_s(40);
   mouse_down = mouse_cap & 1;
 
   hover && mouse_down && !gui_last_mouse_down && gui_active_slider == -1 ? gui_active_slider = slider_idx;
   !mouse_down && gui_active_slider == slider_idx ? gui_active_slider = -1;
 
   gui_active_slider == slider_idx ? (
-    pct = clamp((mouse_x - x) / max(w,1), 0, 1);
+    pct = clamp((mouse_x - x) / max(w, 1), 0, 1);
     new_val = min_val + (max_val - min_val) * pct;
     slider_idx == 2 ? new_val = floor(new_val * 10 + 0.5) / 10 : new_val = floor(new_val + 0.5);
     slider(slider_idx) = new_val;
@@ -1955,151 +1973,283 @@ function gui_draw_slider(x y w slider_idx label min_val max_val default_val unit
   fill_w = w * pct;
   handle_x = x + fill_w;
 
-  gui_color(0.78,0.82,0.90,1);
+  set_hex_color(gui_theme_text_muted, 1);
   gfx_setfont(1);
   gfx_x = x;
   gfx_y = y;
   gfx_drawstr(label);
 
-  slider_idx == 2 ? sprintf(#core_value, "%.1f dB", val) : sprintf(#core_value, "%.0f percent", val);
+  slider_idx == 2 ? sprintf(#core_value, "%.1f dB", val) : sprintf(#core_value, "%.0f%%", val);
+  set_hex_color(gui_theme_text, 1);
   gfx_setfont(2);
   gfx_measurestr(#core_value, value_w, value_h);
   gfx_x = x + w - value_w;
   gfx_y = y;
   gfx_drawstr(#core_value);
 
-  gui_fill(x, track_y, w, 7, 0.12,0.14,0.18,1);
-  gui_fill(x, track_y, fill_w, 7, 0.45,0.58,0.82,1);
-  gui_frame(x, track_y, w, 7, 0.24,0.28,0.36,1);
+  set_hex_color(gui_theme_border, 1);
+  gfx_rect(x, track_y, w, ui_s(6), 1);
+  set_hex_color(gui_theme_accent, 0.78);
+  gfx_rect(x, track_y, fill_w, ui_s(6), 1);
+  set_hex_color(hover || gui_active_slider == slider_idx ? 0xFFFFFF : gui_theme_accent, 1);
+  gfx_circle(handle_x, track_y + ui_s(3), ui_s(6), 1, 1);
 
-  gui_color(hover || gui_active_slider == slider_idx ? 0.94 : 0.74, hover || gui_active_slider == slider_idx ? 0.96 : 0.79, hover || gui_active_slider == slider_idx ? 1.00 : 0.90, 1);
-  gfx_circle(handle_x, track_y + 3.5, 7, 1, 1);
-
-  slider_idx == 3 ? (
-    gui_color(0.48,0.54,0.66,1);
-    gfx_setfont(3);
-    gfx_x = x;
-    gfx_y = track_y + 14;
-    gfx_drawstr("0 percent = neutral");
+  hover ? (
+    slider_idx == 2 ? sprintf(#gui_hover_info, "Input Drive | %.1f dB", val) :
+                      sprintf(#gui_hover_info, "Auto-Adapt | %.0f percent", val);
   );
 );
 
-function gui_draw_meter(x y w h level_l level_r label peak_hold_ptr) local(level peak_db pct fill_l fill_r bar_w db_w db_h tick_y tick_db i hold_pct hold_y)
+function gui_draw_peak_tick(x y w h tick_db) local(tick_y tick_w)
 (
-  gui_fill(x,y,w,h, 0.08,0.10,0.13,1);
-  gui_frame(x,y,w,h, 0.22,0.26,0.34,1);
+  tick_y = y + h - ui_s(2) - floor((h - ui_s(4)) * clamp((tick_db + 60) / 66, 0, 1));
+  tick_w = tick_db == 0 ? max(1, floor(ui_s(2))) : max(1, floor(gui_scale));
+  set_hex_color(gui_theme_border, tick_db == 0 ? 1 : (tick_db == -12 ? 0.72 : 0.45));
+  gfx_line(x + ui_s(1), tick_y, x + w - ui_s(2), tick_y, tick_w);
+);
 
-  bar_w = (w - 9) * 0.5;
-  peak_db = lin2db(max(level_l, level_r));
-  pct = clamp((peak_db + 60) / 60, 0, 1);
-  fill_l = h * clamp((lin2db(level_l) + 60) / 60, 0, 1);
-  fill_r = h * clamp((lin2db(level_r) + 60) / 60, 0, 1);
+function gui_draw_gr_tick(x y w h tick_db) local(tick_y tick_w)
+(
+  tick_y = y + ui_s(2) + floor((h - ui_s(4)) * clamp(tick_db / 24, 0, 1));
+  tick_w = (tick_db == 12 || tick_db == 24) ? max(1, floor(ui_s(2))) : max(1, floor(gui_scale));
+  set_hex_color(gui_theme_border, tick_db == 12 ? 0.85 : (tick_db == 24 ? 1 : 0.45));
+  gfx_line(x + ui_s(1), tick_y, x + w - ui_s(2), tick_y, tick_w);
+);
 
-  gui_fill(x+3, y+h-fill_l-2, bar_w, fill_l, 0.42,0.58,0.82,1);
-  gui_fill(x+6+bar_w, y+h-fill_r-2, bar_w, fill_r, 0.42,0.58,0.82,1);
+function gui_draw_peak_meter(x y w h level_l level_r label peak_hold_ptr) local(db_l db_r peak_db pct_l pct_r fill_l fill_r bar_w hold_pct hold_y label_w label_h db_w db_h hover)
+(
+  x = ui_x(x);
+  y = ui_y(y);
+  w *= gui_scale;
+  h *= gui_scale;
+  db_l = lin2db(level_l);
+  db_r = lin2db(level_r);
+  peak_db = max(db_l, db_r);
+  pct_l = clamp((db_l + 60) / 66, 0, 1);
+  pct_r = clamp((db_r + 60) / 66, 0, 1);
+  fill_l = floor((h - ui_s(4)) * pct_l);
+  fill_r = floor((h - ui_s(4)) * pct_r);
+  bar_w = floor((w - ui_s(6)) * 0.5);
+  hover = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
 
-  // Tick marks at -48, -24, -12, -6, 0 dB
-  i = 0;
-  loop(5,
-    tick_db = i == 0 ? -48 : i == 1 ? -24 : i == 2 ? -12 : i == 3 ? -6 : 0;
-    tick_y = y + h - h * clamp((tick_db + 60) / 60, 0, 1) - 2;
-    gui_color(0.32, 0.36, 0.44, 0.7);
-    gfx_line(x + 2, tick_y, x + w - 3, tick_y, 0);
-    i += 1;
-  );
+  set_hex_color(gui_theme_panel, 1);
+  gfx_rect(x, y, w, h, 1);
+  set_hex_color(gui_theme_border, 1);
+  gfx_rect(x, y, w, h, 0);
 
-  // Peak hold tick
+  set_hex_color(db_l > 0 ? gui_theme_danger : (db_l > -12 ? gui_theme_warning : gui_theme_safe), 1);
+  gfx_rect(x + ui_s(2), y + h - ui_s(2) - fill_l, bar_w, fill_l, 1);
+  set_hex_color(db_r > 0 ? gui_theme_danger : (db_r > -12 ? gui_theme_warning : gui_theme_safe), 1);
+  gfx_rect(x + ui_s(4) + bar_w, y + h - ui_s(2) - fill_r, bar_w, fill_r, 1);
+
+  gui_draw_peak_tick(x, y, w, h, -24);
+  gui_draw_peak_tick(x, y, w, h, -12);
+  gui_draw_peak_tick(x, y, w, h, -6);
+  gui_draw_peak_tick(x, y, w, h, 0);
+
   peak_hold_ptr[] = max(peak_db, peak_hold_ptr[] - 0.35);
-  hold_pct = clamp((peak_hold_ptr[] + 60) / 60, 0, 1);
-  hold_pct > 0.001 ? (
-    hold_y = y + h - h * hold_pct - 2;
-    gui_color(0.92, 0.78, 0.38, 0.9);
-    gfx_line(x + 2, hold_y, x + w - 3, hold_y, 0);
-  );
+  hold_pct = clamp((peak_hold_ptr[] + 60) / 66, 0, 1);
+  hold_y = y + h - ui_s(2) - floor((h - ui_s(4)) * hold_pct);
+  set_hex_color(peak_hold_ptr[] > 0 ? gui_theme_danger : (peak_hold_ptr[] > -12 ? gui_theme_warning : gui_theme_safe), 1);
+  gfx_rect(x + ui_s(2), hold_y, w - ui_s(4), max(1, floor(ui_s(2))), 1);
 
-  gui_color(0.70,0.75,0.84,1);
+  set_hex_color(gui_theme_text_muted, 1);
   gfx_setfont(5);
-  gfx_measurestr(label, db_w, db_h);
-  gfx_x = x + (w - db_w) * 0.5;
-  gfx_y = y + h + 5;
+  gfx_measurestr(label, label_w, label_h);
+  gfx_x = x + (w - label_w) * 0.5;
+  gfx_y = y + h + ui_s(4);
   gfx_drawstr(label);
 
-  sprintf(#core_db, "%.1f", peak_db);
-  gfx_setfont(3);
+  sprintf(#core_db, "%.0f", peak_db);
+  set_hex_color(gui_theme_text, 1);
+  gfx_setfont(6);
   gfx_measurestr(#core_db, db_w, db_h);
   gfx_x = x + (w - db_w) * 0.5;
-  gfx_y = y + h - db_h - 5;
+  gfx_y = y + h - db_h - ui_s(4);
   gfx_drawstr(#core_db);
+
+  hover ? sprintf(#gui_hover_info, "Input peak | L %.1f dBFS / R %.1f dBFS", db_l, db_r);
+);
+
+function gui_draw_gr_meter(x y w h value_db label) local(pct fill_h label_w label_h db_w db_h hover gr_color)
+(
+  x = ui_x(x);
+  y = ui_y(y);
+  w *= gui_scale;
+  h *= gui_scale;
+  value_db = max(value_db, 0);
+  pct = clamp(value_db / 24, 0, 1);
+  fill_h = floor((h - ui_s(4)) * pct);
+  hover = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
+
+  set_hex_color(gui_theme_panel, 1);
+  gfx_rect(x, y, w, h, 1);
+  set_hex_color(gui_theme_border, 1);
+  gfx_rect(x, y, w, h, 0);
+
+  gr_color = value_db > 18 ? gui_theme_danger : (value_db > 12 ? gui_theme_warning : gui_theme_activity);
+  set_hex_color(gr_color, 1);
+  gfx_rect(x + ui_s(2), y + ui_s(2), w - ui_s(4), fill_h, 1);
+  gui_draw_gr_tick(x, y, w, h, 0);
+  gui_draw_gr_tick(x, y, w, h, 6);
+  gui_draw_gr_tick(x, y, w, h, 12);
+  gui_draw_gr_tick(x, y, w, h, 18);
+  gui_draw_gr_tick(x, y, w, h, 24);
+
+  set_hex_color(gui_theme_text_muted, 1);
+  gfx_setfont(5);
+  gfx_measurestr(label, label_w, label_h);
+  gfx_x = x + (w - label_w) * 0.5;
+  gfx_y = y + h + ui_s(4);
+  gfx_drawstr(label);
+
+  value_db > 0.05 ? sprintf(#core_db, "-%.0f", value_db) : strcpy(#core_db, "0");
+  set_hex_color(value_db > 0.05 ? 0xFFE0B5 : gui_theme_text_muted, 1);
+  gfx_setfont(6);
+  gfx_measurestr(#core_db, db_w, db_h);
+  gfx_x = x + (w - db_w) * 0.5;
+  gfx_y = y + h - db_h - ui_s(4);
+  gfx_drawstr(#core_db);
+
+  hover ? sprintf(#gui_hover_info, "%s gain reduction | %.1f dB", label, value_db);
 );
 
 
 
 mouse_down = mouse_cap & 1;
-canvas_w = 620;
-canvas_h = 262;
-gui_dx = max(0, floor((gfx_w - canvas_w) * 0.5));
-gui_dy = max(0, floor((gfx_h - canvas_h) * 0.5));
+strcpy(#gui_hover_info, "");
 
-gui_peak_in_l = max(gui_peak_in_l * 0.82, gui_peak_in_l_sample);
-gui_peak_in_r = max(gui_peak_in_r * 0.82, gui_peak_in_r_sample);
-gui_peak_out_l = max(gui_peak_out_l * 0.82, gui_peak_out_l_sample);
-gui_peak_out_r = max(gui_peak_out_r * 0.82, gui_peak_out_r_sample);
+gui_peak_in_l = max(gui_peak_in_l_sample, gui_peak_in_l * 0.93);
+gui_peak_in_r = max(gui_peak_in_r_sample, gui_peak_in_r * 0.93);
 gui_peak_in_l_sample = 0;
 gui_peak_in_r_sample = 0;
-gui_peak_out_l_sample = 0;
-gui_peak_out_r_sample = 0;
 
-gui_fill(0,0,gfx_w,gfx_h, 0.055,0.065,0.085,1);
+gui_gr_agc_now = max(0, -lin2db(max(min(agc_low_eff_gain, agc_high_eff_gain), 0.000001)));
+gui_gr_density_now = max(0, -lin2db(max(min(g1, min(g2, min(g3, min(g4, min(g5, g6))))), 0.000001)));
+gui_final_gain = min(final_threshold_guard_gain, min(dynamic_clip_gain, pre_tgain));
+gui_gr_final_now = max(0, -lin2db(max(gui_final_gain, 0.000001)));
+gui_gr_agc = max(gui_gr_agc_now, gui_gr_agc * 0.90);
+gui_gr_density = max(gui_gr_density_now, gui_gr_density * 0.90);
+gui_gr_final = max(gui_gr_final_now, gui_gr_final * 0.90);
 
-gx = gui_dx;
-gy = gui_dy;
+set_hex_color(gui_theme_bg, 1);
+gfx_rect(0, 0, gfx_w, gfx_h, 1);
 
-gui_fill(gx,gy,canvas_w,50, 0.08,0.10,0.14,1);
-gui_frame(gx,gy,canvas_w,50, 0.18,0.22,0.30,1);
-gui_color(0.92,0.95,1,1);
+layout_margin = gui_layout_w < 420 ? 10 : 18;
+layout_gap = gui_layout_w < 420 ? 8 : 12;
+header_h = gui_layout_h < 220 ? 34 : 45;
+footer_h = gui_layout_h < 190 ? 0 : 32;
+content_top = header_h + (gui_layout_h < 220 ? 6 : 15);
+footer_y = gui_layout_h - footer_h;
+content_bottom = footer_y - (footer_h > 0 ? 10 : 6);
+content_h = max(80, content_bottom - content_top);
+layout_stacked = gfx_w < gfx_h * 1.45;
+
+layout_stacked ? (
+  controls_x = layout_margin;
+  controls_y = content_top;
+  controls_w = gui_layout_w - layout_margin * 2;
+  controls_h = min(240, max(170, content_h * 0.36));
+  activity_x = layout_margin;
+  activity_y = controls_y + controls_h + layout_gap;
+  activity_w = controls_w;
+  activity_h = max(80, content_bottom - activity_y);
+) : (
+  available_w = gui_layout_w - layout_margin * 2 - layout_gap;
+  controls_x = layout_margin;
+  controls_y = content_top;
+  controls_w = available_w * 0.58;
+  controls_h = content_h;
+  activity_x = controls_x + controls_w + layout_gap;
+  activity_y = content_top;
+  activity_w = gui_layout_w - layout_margin - activity_x;
+  activity_h = content_h;
+);
+
+set_hex_color(gui_theme_panel, 1);
+gfx_rect(ui_x(0), ui_y(0), ui_s(gui_layout_w), ui_s(header_h), 1);
+set_hex_color(gui_theme_border, 1);
+gfx_line(ui_x(0), ui_y(header_h), ui_x(gui_layout_w), ui_y(header_h), max(1, floor(gui_scale)));
+
+set_hex_color(gui_theme_accent, 1);
 gfx_setfont(4);
-gfx_x = gx + 18;
-gfx_y = gy + 11;
+gfx_x = ui_x(15);
+gfx_y = ui_y(header_h < 40 ? 7 : 10);
 gfx_drawstr("OPTILAB CORE");
-gui_color(0.58,0.64,0.75,1);
-gfx_setfont(5);
-gfx_x = gx + 20;
-gfx_y = gy + 33;
-gfx_drawstr("broadcast-style leveling, polish, and peak control");
+header_h >= 40 && gui_layout_w >= 390 ? (
+  set_hex_color(gui_theme_text_muted, 1);
+  gfx_setfont(1);
+  gfx_x = ui_x(15);
+  gfx_y = ui_y(28);
+  gfx_drawstr("broadcast leveling, density and final control");
+);
 
-gui_fill(gx + 18, gy + 68, 355, 178, 0.075,0.09,0.12,1);
-gui_frame(gx + 18, gy + 68, 355, 178, 0.18,0.22,0.30,1);
-gui_color(0.76,0.82,0.92,1);
+set_hex_color(gui_theme_panel, 0.4);
+gfx_rect(ui_x(controls_x), ui_y(controls_y), ui_s(controls_w), ui_s(controls_h), 1);
+set_hex_color(gui_theme_border, 1);
+gfx_rect(ui_x(controls_x), ui_y(controls_y), ui_s(controls_w), ui_s(controls_h), 0);
+set_hex_color(gui_theme_accent, 1);
 gfx_setfont(2);
-gfx_x = gx + 34;
-gfx_y = gy + 82;
-gfx_drawstr("CONTROLS");
+gfx_x = ui_x(controls_x + 14);
+gfx_y = ui_y(controls_y + 13);
+gfx_drawstr("CORE CONTROLS");
 
-gui_color(0.58,0.64,0.74,1);
-gfx_setfont(5);
-gfx_x = gx + 34;
-gfx_y = gy + 104;
-gfx_drawstr("Mode, input, and adaptation stay available as normal REAPER sliders.");
+controls_inner_x = controls_x + 14;
+controls_inner_w = controls_w - 28;
+control_mode_y = controls_y + 35;
+control_slider1_y = min(controls_y + controls_h - 93, controls_y + max(76, controls_h * 0.45));
+control_slider2_y = controls_y + controls_h - 48;
+gui_draw_mode(controls_inner_x, control_mode_y, controls_inner_w, 30);
+gui_draw_slider(controls_inner_x, control_slider1_y, controls_inner_w, 2, "Input Drive", -12, 18);
+gui_draw_slider(controls_inner_x, control_slider2_y, controls_inner_w, 3, "Auto-Adapt", 0, 100);
 
-gui_draw_mode(gx + 34, gy + 128, 210, 34);
-gui_draw_slider(gx + 34, gy + 177, 305, 2, "Input Drive", -12, 18, 0, "dB");
-gui_draw_slider(gx + 34, gy + 225, 305, 3, "Auto-Adapt", 0, 100, 0, "percent");
-
-gui_fill(gx + 392, gy + 68, 210, 178, 0.075,0.09,0.12,1);
-gui_frame(gx + 392, gy + 68, 210, 178, 0.18,0.22,0.30,1);
-gui_color(0.76,0.82,0.92,1);
+set_hex_color(gui_theme_panel, 0.4);
+gfx_rect(ui_x(activity_x), ui_y(activity_y), ui_s(activity_w), ui_s(activity_h), 1);
+set_hex_color(gui_theme_border, 1);
+gfx_rect(ui_x(activity_x), ui_y(activity_y), ui_s(activity_w), ui_s(activity_h), 0);
+set_hex_color(gui_theme_accent, 1);
 gfx_setfont(2);
-gfx_x = gx + 408;
-gfx_y = gy + 82;
-gfx_drawstr("PEAK VIEW");
+gfx_x = ui_x(activity_x + 14);
+gfx_y = ui_y(activity_y + 13);
+gfx_drawstr("CORE ACTIVITY");
 
-gui_draw_meter(gx + 420, gy + 112, 48, 92, gui_peak_in_l, gui_peak_in_r, "Input", gui_peak_hold_in);
-gui_draw_meter(gx + 506, gy + 112, 48, 92, gui_peak_out_l, gui_peak_out_r, "Output", gui_peak_hold_out);
+meter_top = activity_y + 36;
+meter_h = max(36, activity_h - 78);
+meter_area_x = activity_x + 21;
+meter_area_w = max(120, activity_w - 42);
+meter_w = min(40, max(22, meter_area_w * 0.11));
+peak_meter_w = meter_w + 2;
+meter_gap = max(6, (meter_area_w - peak_meter_w - meter_w * 3) / 3);
+meter_input_x = meter_area_x;
+meter_agc_x = meter_input_x + peak_meter_w + meter_gap;
+meter_density_x = meter_agc_x + meter_w + meter_gap;
+meter_final_x = meter_density_x + meter_w + meter_gap;
 
-gui_color(0.52,0.58,0.68,1);
-gfx_setfont(3);
-gfx_x = gx + 416;
-gfx_y = gy + 222;
-gfx_drawstr("Ceiling target: -0.1 dBFS");
+gui_draw_peak_meter(meter_input_x, meter_top, peak_meter_w, meter_h, gui_peak_in_l, gui_peak_in_r, "Input", gui_peak_hold_in);
+gui_draw_gr_meter(meter_agc_x, meter_top, meter_w, meter_h, gui_gr_agc, "AGC");
+gui_draw_gr_meter(meter_density_x, meter_top, meter_w, meter_h, gui_gr_density, "Density");
+gui_draw_gr_meter(meter_final_x, meter_top, meter_w, meter_h, gui_gr_final, "Final");
+
+footer_h > 0 ? (
+  set_hex_color(gui_theme_panel, 1);
+  gfx_rect(ui_x(0), ui_y(footer_y), ui_s(gui_layout_w), ui_s(footer_h), 1);
+  set_hex_color(gui_theme_border, 1);
+  gfx_line(ui_x(0), ui_y(footer_y), ui_x(gui_layout_w), ui_y(footer_y), max(1, floor(gui_scale)));
+
+  gfx_setfont(5);
+  strlen(#gui_hover_info) > 0 ? (
+    set_hex_color(gui_theme_text, 1);
+    gfx_x = ui_x(15);
+    gfx_y = ui_y(footer_y + 10);
+    gfx_drawstr(#gui_hover_info);
+  ) : (
+    core_mode_name(#core_mode_text);
+    set_hex_color(gui_theme_text_muted, 1);
+    sprintf(#core_footer, "%s | ceiling -0.1 dBFS", #core_mode_text);
+    gfx_x = ui_x(15);
+    gfx_y = ui_y(footer_y + 10);
+    gfx_drawstr(#core_footer);
+  );
+);
 
 gui_last_mouse_down = mouse_down;

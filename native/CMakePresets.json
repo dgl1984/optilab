@@ -3,17 +3,25 @@
   "configurePresets": [
     {
       "name": "vs2022-x64",
-      "displayName": "Visual Studio 2022 x64",
+      "displayName": "Visual Studio 2022 x64 (Core + CLAP)",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/build"
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "OPTILAB_BUILD_CLAP": "ON",
+        "OPTILAB_BUILD_WINAMP": "OFF"
+      }
     },
     {
       "name": "vs2022-win32",
-      "displayName": "Visual Studio 2022 Win32 (Winamp DSP)",
+      "displayName": "Visual Studio 2022 Win32 (Core + Winamp DSP)",
       "generator": "Visual Studio 17 2022",
       "architecture": "Win32",
-      "binaryDir": "${sourceDir}/build-winamp"
+      "binaryDir": "${sourceDir}/build-winamp",
+      "cacheVariables": {
+        "OPTILAB_BUILD_CLAP": "OFF",
+        "OPTILAB_BUILD_WINAMP": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -36,6 +44,24 @@
       "name": "winamp-debug",
       "configurePreset": "vs2022-win32",
       "configuration": "Debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "release",
+      "configurePreset": "vs2022-x64",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "winamp-release",
+      "configurePreset": "vs2022-win32",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }

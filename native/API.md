@@ -1,17 +1,18 @@
 # OptiLab Core Native API
 
-OptiLab Core v1.1.2 includes a framework-independent C++17 static library named
-`optilab-core`. It is the same processing engine used by the Winamp DSP wrapper.
+OptiLab Core v1.2.0 includes a framework-independent C++17 static library named
+`optilab-core`. It is the same processing engine used by the CLAP and Winamp
+plug-in wrappers.
 
 This is a C++ API, not a stable C ABI. If you need to call OptiLab Core from C,
 Rust, C#, Python, or another language, wrap this C++ class in a small adapter
 owned by your project. A stable exported C API may be added in a later release,
-but v1.1.2 does not promise one.
+but v1.2.0 does not promise one.
 
 ## Files
 
-- `native/src/OptiLabCore.h`: public C++ API
-- `native/src/OptiLabCore.cpp`: processor implementation
+- `native/core/OptiLabCore.h`: public C++ API
+- `native/core/OptiLabCore.cpp`: processor implementation
 - `native/tests/OptiLabCoreTests.cpp`: small usage and regression tests
 
 ## Build target
@@ -30,7 +31,7 @@ add_subdirectory(native)
 target_link_libraries(your_target PRIVATE optilab-core)
 ```
 
-The target publishes `native/src` as an include directory, so consumers can use:
+The target publishes `native/core` as an include directory, so consumers can use:
 
 ```cpp
 #include "OptiLabCore.h"
@@ -104,7 +105,8 @@ clamp UI values before calling `setParameters`.
 ## Audio formats
 
 The native engine processes 32-bit floating-point samples. Integer PCM
-conversion is handled by the Winamp adapter in `native/winamp/WinampPcm.*`.
+conversion is handled by the Winamp adapter in
+`native/plugins/winamp/WinampPcm.*`.
 
 Available processing methods:
 
@@ -154,7 +156,7 @@ and lookahead stages will not settle normally.
 
 ## Versioning note
 
-The v1.1.2 C++ API is small and practical, but it should not yet be treated as a
+The v1.2.0 C++ API is small and practical, but it should not yet be treated as a
 long-term binary compatibility promise. Prefer rebuilding against the matching
 release source rather than mixing headers and libraries from different OptiLab
 Core versions.

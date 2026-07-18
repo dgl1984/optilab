@@ -6,7 +6,7 @@ changes should be discussed in an issue first.
 
 ## What is in scope
 
-- Bug fixes for the JSFX, C++ engine, Winamp adapter, or CI.
+- Bug fixes for the JSFX, C++ engine, CLAP wrapper, Winamp adapter, or CI.
 - Improvements to accessibility, documentation, or test coverage.
 - Host compatibility fixes for Winamp, RadioBOSS, StationPlaylist Studio, or
   other Winamp DSP–compatible broadcast applications.
@@ -44,20 +44,29 @@ cmake --build native/build --config Release
 ctest --test-dir native/build -C Release --output-on-failure
 ```
 
+Install the tested local CLAP build:
+
+```powershell
+./scripts/install-clap.ps1
+```
+
 The packaging script produces the release ZIP and SHA-256 file:
 
 ```powershell
 ./scripts/package-winamp.ps1
+./scripts/package-clap.ps1
 ```
 
 ## Tests
 
-The project includes three test executables:
+The project includes four test executables across the x64 and Win32 builds:
 
 - `optilab-core-tests` — Core API and processing behavior.
 - `optilab-winamp-pcm-tests` — PCM integer-conversion paths.
 - `optilab-winamp-smoke-tests` — DLL loading, export presence, and version
   metadata (Win32 build only).
+- `optilab-clap-smoke-tests`: CLAP ABI, DSP, latency, state, parameter,
+  accessibility, and editor checks (x64 Windows build only).
 
 Run `ctest --output-on-failure` in the relevant build directory. All tests must
 pass before a pull request is merged.
@@ -68,12 +77,18 @@ pass before a pull request is merged.
 - No dynamic CRT dependency in the Release Winamp DLL.
 - No memory allocation or lock acquisition in any `process*` method.
 - Match the indentation and naming style of the surrounding code.
+- Keep reusable DSP in `native/core`; format-specific code belongs under
+  `native/plugins/<format>`.
 
 ## Documentation
 
 - Update `CHANGELOG.md` under a new version heading for any user-visible change.
 - If your change affects installation, controls, or accessibility, update the
   relevant `.md` file in the repository root or `native/`.
+- Read `docs/CLAP_ACCESSIBILITY.md` before changing the CLAP editor, its parent
+  window hierarchy, control classes, focus handling, or parameter exposure.
+- Do not remove the emulated REAPER wrapper, Tab-order, or MSAA value assertions
+  from the CLAP smoke test.
 - Keep all user-facing text in plain English. Avoid jargon that a non-audio
   developer would not understand.
 

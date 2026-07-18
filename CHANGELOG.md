@@ -1,5 +1,71 @@
 # Changelog
 
+## OptiLab Core v1.2.0
+
+This release adds the first public 64-bit Windows CLAP build, corrects a
+user-reported fade at the beginning of playback, and carries OptiLab Core's
+three-control workflow into an accessible, resizable native editor. The JSFX,
+CLAP, and native Core retain matching processing behavior.
+
+### Processing
+
+- Fixed an unintended short fade-in at the beginning of playback. OptiLab Core
+  now starts at its intended processing state without the previous startup
+  ramp.
+- Kept constant reported CLAP latency across modes by padding lower-latency
+  configurations internally.
+- Preserved bit-identical rendered output through the CLAP performance and
+  accessibility work.
+
+### New CLAP plug-in
+
+- Added a self-contained 64-bit Windows CLAP plug-in with the stable ID
+  `com.lanesaudio.optilab-core` and LanesAudio branding.
+- Exposed Mode, Input Drive, and Auto-Adapt through the standard CLAP parameter
+  extension so hosts, automation, OSARA, and other accessibility tools can use
+  every parameter without opening the custom editor.
+- Added a responsive native Windows editor with standard controls, exact dB
+  text for Input Drive, percentage output for Auto-Adapt, deterministic Tab and
+  Shift+Tab traversal, and keyboard adjustment.
+- Added state save/restore, sample-rate-aware fixed latency, offline-render
+  notification, denormal protection, and visual-meter work that is disabled
+  from the audio path during offline rendering.
+- Added version-checked packaging, architecture/export/runtime verification,
+  and CLAP ABI, processing, state, editor, focus, and MSAA smoke tests.
+
+### Accessibility implementation note
+
+CLAP accessibility has two layers and both must remain functional. First, every
+user parameter must have a complete standard CLAP parameter implementation with
+a meaningful name, range, text conversion, and automation behavior. This is
+the host-level path used by OSARA and must not depend on the custom editor.
+Second, a custom editor must use controls with native accessibility semantics,
+logical focus order, exact unit text, and keyboard operation. A Windows
+trackbar reports its normalized percentage, so a non-percentage value such as
+Input Drive also needs a focusable native field that exposes the actual dB
+value.
+
+REAPER adds a `reaperPluginHostWrapProc` window around an embedded CLAP editor.
+Parenting the accessible controls directly beneath that wrapper can prevent Tab
+and mouse hit testing from reaching them. OptiLab detects that REAPER-specific
+wrapper, places its `WS_EX_CONTROLPARENT` editor beside it under the wrapper's
+parent, preserves the wrapper bounds, and posts a message after `gui.show()` to
+hide the wrapper before moving focus to the first control. Other hosts retain
+normal CLAP parenting.
+
+This approach was informed by James Teh's GPLv2
+[App2Clap](https://github.com/jcsteh/app2clap): its
+[native `DS_CONTROL` dialog definitions](https://github.com/jcsteh/app2clap/blob/d175ef32c4da31dcc711fa8b8a481c1654987411/src/resource.rc#L13-L46),
+[REAPER-specific parenting and show handling](https://github.com/jcsteh/app2clap/blob/d175ef32c4da31dcc711fa8b8a481c1654987411/src/common.cpp#L11-L44),
+and the original
+[tabbing and hit-testing fix](https://github.com/jcsteh/app2clap/commit/f0af98c852f314c4efc7de8767fe51cc69a92fd2).
+OptiLab's smoke test emulates the REAPER wrapper and fails if the editor is
+again placed beneath it, if the wrapper remains over the controls, if initial
+focus fails, or if Tab order and accessible dB text regress. Maintainers and
+fork authors should read
+[`docs/CLAP_ACCESSIBILITY.md`](docs/CLAP_ACCESSIBILITY.md) before replacing the
+editor or changing its window hierarchy.
+
 ## OptiLab Core v1.1.2
 
 This release keeps the Winamp DSP sound and host calibration from v1.1.1, while

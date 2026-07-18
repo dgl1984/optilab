@@ -8,7 +8,11 @@ Desktop.ini
 *.bak
 
 # Native build and release products
-native/build/
-native/build-winamp/
-dist/
-graphify-out/
+/native/build/
+/native/build-*/
+/dist/
+
+# Local analysis and developer state
+/graphify-out/
+/.vs/
+/native/CMakeUserPresets.json

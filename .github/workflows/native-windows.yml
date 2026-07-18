@@ -57,15 +57,52 @@ jobs:
           cmake --build native/build --config Release
           ctest --test-dir native/build -C Release --output-on-failure
 
+      - name: Verify CLAP architecture, export, and runtime dependencies
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $visualStudio = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          $dumpbin = Get-ChildItem "$visualStudio\VC\Tools\MSVC" -Filter dumpbin.exe -Recurse |
+            Select-Object -First 1 -ExpandProperty FullName
+          $plugin = "native\build\Release\OptiLab_Core.clap"
+          $headers = & $dumpbin /headers /exports $plugin | Out-String
+          if ($headers -notmatch "8664 machine \(x64\)" -or
+              $headers -notmatch "clap_entry") {
+            throw "The CLAP is not x64 or is missing clap_entry."
+          }
+          $dependencies = & $dumpbin /dependents $plugin | Out-String
+          if ($dependencies -match "VCRUNTIME|MSVCP|api-ms-win-crt") {
+            throw "The Release CLAP depends on the dynamic Microsoft C/C++ runtime."
+          }
+
       - name: Package Winamp DSP
         shell: pwsh
         run: ./scripts/package-winamp.ps1
 
-      - name: Upload tested release candidate
+      - name: Package CLAP candidate
+        shell: pwsh
+        run: ./scripts/package-clap.ps1
+
+      - name: Upload tested Winamp release candidate
         uses: actions/upload-artifact@v4
         with:
           name: optilab-core-winamp-dsp-x86
-          path: dist/*.zip
+          path: |
+            dist/*-Winamp-DSP-x86.zip
+            dist/OptiLab-Core-*-SHA256.txt
+            dist/OptiLab-Core-*-JSFX-SHA256.txt
+            !dist/*-CLAP-x64-SHA256.txt
+          if-no-files-found: error
+
+      - name: Upload tested CLAP candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: optilab-core-clap-x64
+          path: |
+            dist/*-CLAP-x64.zip
+            dist/*-CLAP-x64-SHA256.txt
           if-no-files-found: error
 
   release:
@@ -85,6 +122,12 @@ jobs:
           name: optilab-core-winamp-dsp-x86
           path: dist
 
+      - name: Download tested CLAP candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: optilab-core-clap-x64
+          path: dist
+
       - name: Create GitHub release
         shell: pwsh
         env:
@@ -92,12 +135,11 @@ jobs:
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           Copy-Item -LiteralPath "Effects\optilab_core.jsfx" -Destination "dist\optilab_core.jsfx"
-          Copy-Item -LiteralPath "native\API.md" -Destination "dist\OptiLab-Core-$version-Native-API.md"
-          # The JSFX SHA-256 is produced by package-winamp.ps1 and already in dist.
-          # Re-run it here to make sure both assets exist in the release download.
-          $jsfxHash = (Get-FileHash -Algorithm SHA256 -LiteralPath "dist\optilab_core.jsfx").Hash
-          "$jsfxHash  optilab_core.jsfx" | Set-Content -LiteralPath "dist\OptiLab-Core-$version-JSFX-SHA256.txt" -Encoding ascii
-          $assets = Get-ChildItem ./dist -File | Select-Object -ExpandProperty FullName
+          $assets = @(
+            (Resolve-Path "dist\optilab_core.jsfx").Path
+            (Resolve-Path "dist\OptiLab-Core-$version-Winamp-DSP-x86.zip").Path
+            (Resolve-Path "dist\OptiLab-Core-$version-CLAP-x64.zip").Path
+          )
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $env:GITHUB_REF_NAME @assets --clobber

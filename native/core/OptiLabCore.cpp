@@ -252,6 +252,14 @@ OptiLabCore::Parameters OptiLabCore::defaultParameters(Mode mode) noexcept {
     return defaults;
 }
 
+OptiLabCore::Activity OptiLabCore::activity() const noexcept {
+    return {
+        std::min(currentAgcLowEffGain, currentAgcHighEffGain),
+        currentDensityGain,
+        currentFinalGain,
+    };
+}
+
 void OptiLabCore::prepare(double newSampleRate) {
     sampleRate = std::max(1.0, newSampleRate);
     lastMode = -1;
@@ -294,6 +302,10 @@ void OptiLabCore::reset() {
     adaptBassGain = 1.0;
     adaptTopPresenceGain = 1.0;
     adaptTopAirGain = 1.0;
+    currentAgcLowEffGain = 1.0;
+    currentAgcHighEffGain = 1.0;
+    currentDensityGain = 1.0;
+    currentFinalGain = 1.0;
     finalThresholdDriveS = finalThresholdDriveTarget > 0.0 ? finalThresholdDriveTarget : 1.0;
     finalThresholdGuardGain = 1.0;
     preclip.gain = 1.0;
@@ -722,6 +734,10 @@ std::pair<float, float> OptiLabCore::processSample(float left, float right) {
     const double agcHighAuthority = agcHighProcGain < 1.0 ? agcDownMix : agcMix;
     const double agcLowEffGain = 1.0 + (agcLowProcGain - 1.0) * agcLowAuthority;
     const double agcHighEffGain = 1.0 + (agcHighProcGain - 1.0) * agcHighAuthority;
+    if (activityTracking) {
+        currentAgcLowEffGain = agcLowEffGain;
+        currentAgcHighEffGain = agcHighEffGain;
+    }
     l = (lowL / agcDriveSafe) * agcLowEffGain + (highL / agcDriveSafe) * agcHighEffGain;
     r = (lowR / agcDriveSafe) * agcLowEffGain + (highR / agcDriveSafe) * agcHighEffGain;
     if (postAgcSmoothDriveAmt > 0.0000001) {
@@ -890,6 +906,9 @@ std::pair<float, float> OptiLabCore::processSample(float left, float right) {
         g2 = g2 * (1.0 - lowCoherence) + lowSharedGain * lowCoherence;
     }
     g6 = g5;
+    if (activityTracking) {
+        currentDensityGain = std::min({g1, g2, g3, g4, g5, g6});
+    }
 
     if (mbClipMix > 0.0) {
         b3L = mbClipL[0].run(b3L, mbWorkRef * 0.56, mbClipMix * 0.55, 0.42, dc3Amt, distCancelA);
@@ -1017,6 +1036,9 @@ std::pair<float, float> OptiLabCore::processSample(float left, float right) {
     r *= finalDriveGain;
     const double preGain = preclip.linkedLimiter(absmax2(l, r), prelimitThresh, clipAttack, clipRelease);
     const double preTGain = 1.0 - prelimitMix * (1.0 - preGain);
+    if (activityTracking) {
+        currentFinalGain = std::min({finalThresholdGuardGain, dynamicClipGain, preTGain});
+    }
     l *= preTGain;
     r *= preTGain;
     const double clipInL = l, clipInR = r;

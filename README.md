@@ -2,7 +2,8 @@
 
 OptiLab Core is a free audio processor from LanesAudio for leveling, density,
 tone control, saturation, limiting, and general program polish. It is available
-as a JSFX for REAPER and as a classic Winamp-compatible DSP plug-in for Windows.
+as a JSFX for REAPER, a 64-bit Windows CLAP plug-in, and a classic
+Winamp-compatible DSP plug-in for Windows.
 
 The processor has three main controls: **Mode**, **Input**, and **Auto-Adapt**.
 That simplicity is intentional. OptiLab Core is designed to reach a useful,
@@ -39,19 +40,19 @@ important than an aggressive broadcast sound.
 Start gently. If the result becomes too flat, dense, or pushed, lower Input
 before changing everything else.
 
-## What is new in v1.1.2
+## What is new in v1.2.0
 
-Version 1.1.2 keeps the same simple REAPER JSFX interface and refines the
-Winamp-compatible DSP build for Windows.
+Version 1.2.0 adds the first public 64-bit Windows CLAP build while keeping the
+same Mode, Input, and Auto-Adapt workflow across formats.
 
-For existing JSFX users, there are no new controls. The JSFX carries the current
-release number, while the main v1.1.2 work is in the Winamp-compatible DSP.
+It fixes a user-reported short fade-in at the beginning of playback. The CLAP
+build reports its latency correctly, preserves matching rendered output, and
+uses standard parameters that hosts and OSARA can expose without opening the
+custom editor.
 
-The Winamp DSP now opens Stream polish at a gentler `+1.0 dB` Input drive
-starting point, which is a better fit for integer-PCM Winamp-compatible hosts.
-The settings window also has opt-in visual meters. They are off by default so
-screen readers do not announce constantly changing progress percentages unless
-the user explicitly enables them.
+The resizable CLAP editor uses native controls, exact dB text, keyboard
+operation, and REAPER-specific window parenting informed by App2Clap so focus,
+Tab navigation, and mouse hit testing reach the controls immediately.
 
 ## Output ceiling and sample rates
 
@@ -71,7 +72,8 @@ that conversion.
 Release downloads are available from the repository's GitHub Releases page.
 
 - REAPER users need `optilab_core.jsfx`.
-- Winamp-compatible hosts need `OptiLab-Core-1.1.2-Winamp-DSP-x86.zip`.
+- 64-bit Windows CLAP hosts need `OptiLab-Core-1.2.0-CLAP-x64.zip`.
+- Winamp-compatible hosts need `OptiLab-Core-1.2.0-Winamp-DSP-x86.zip`.
 
 ## REAPER installation
 
@@ -80,6 +82,17 @@ Release downloads are available from the repository's GitHub Releases page.
 3. Open the `Effects` folder and copy the JSFX file into it.
 4. Restart REAPER if it is already running.
 5. Add OptiLab Core from REAPER's FX browser.
+
+## CLAP installation
+
+1. Download and extract `OptiLab-Core-1.2.0-CLAP-x64.zip`.
+2. Close the CLAP host.
+3. Copy `OptiLab_Core.clap` to
+   `%LOCALAPPDATA%\Programs\Common\CLAP`.
+4. Restart the host or perform a full plug-in rescan.
+
+See [`native/CLAP.md`](native/CLAP.md) for controls, accessibility, build
+instructions, and host behavior.
 
 ## Winamp-compatible DSP installation and use
 
@@ -90,7 +103,7 @@ Winamp DSP plug-ins.
 1. Download and extract the Winamp DSP ZIP from the latest release.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
-4. Restart the host and select **OptiLab Core 1.1.2** in its DSP configuration.
+4. Restart the host and select **OptiLab Core 1.2.0** in its DSP configuration.
 
 Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
 require administrator approval. Other hosts choose their own plug-in folders.
@@ -102,6 +115,13 @@ normal focus indication, and screen-reader-friendly labels. See
 Use the Winamp DSP the same way you use the JSFX: choose a mode, set Input so
 the processor is working without sounding overdriven, then raise Auto-adapt if
 you want more automatic leveling, tone balancing, and protection.
+
+## Development Layout
+
+Source ownership and generated-file boundaries are documented in
+[`docs/REPOSITORY_LAYOUT.md`](docs/REPOSITORY_LAYOUT.md). CMake build trees,
+release staging, installed plug-ins, and local Graphify output are intentionally
+kept out of version control.
 
 ## Donations and contact
 

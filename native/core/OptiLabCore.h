@@ -19,11 +19,19 @@ public:
         double autoAdaptPct = 0.0;
     };
 
+    struct Activity {
+        double agcGain = 1.0;
+        double densityGain = 1.0;
+        double finalGain = 1.0;
+    };
+
     static Parameters defaultParameters(Mode mode) noexcept;
 
     void prepare(double newSampleRate);
     void setParameters(const Parameters& newParameters);
     Parameters parameters() const { return params; }
+    Activity activity() const noexcept;
+    void setActivityTracking(bool enabled) noexcept { activityTracking = enabled; }
     std::size_t latencySamples() const { return pathDelay; }
     void reset();
 
@@ -360,6 +368,11 @@ private:
     double adaptBassGain = 1.0;
     double adaptTopPresenceGain = 1.0;
     double adaptTopAirGain = 1.0;
+    double currentAgcLowEffGain = 1.0;
+    double currentAgcHighEffGain = 1.0;
+    double currentDensityGain = 1.0;
+    double currentFinalGain = 1.0;
+    bool activityTracking = false;
     int masterStartupArmed = 1;
     int masterStartupAge = 0;
     int masterStartupPrimeWindow = 0;
