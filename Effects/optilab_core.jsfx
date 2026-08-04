@@ -3,14 +3,12 @@
 // @author LanesAudio
 // @about
 //   OptiLab Core is a three-control broadcast and mastering processor.
-//   v1.3.1 adds feedback-refined low-frequency control and sample-rate-safe output delivery.
+//   v1.3.1 refines Stream Auto-Adapt and output delivery.
 // @changelog
 //   v1.3.1
-//   - Added slow post-bass feedback refinement for moderately lean Stream material.
-//   - Added activity burden withdrawal so rapid kick/bass trains do not overload downstream Density/Final processing.
-//   - Added a persistent sub-rumble veto using the Stream HPF rejection signal; no extra crossover is created.
-//   - Feedback assist remains bounded and normally operates conservatively.
-//   - Reinforced sample-rate-change state reset and final -0.1 dBFS sample-peak delivery guard.
+//   - Stream Auto-Adapt handles lean low end more intelligently.
+//   - Repeated bass overload and persistent sub-rumble are handled more conservatively.
+//   - Output-ceiling behavior is more consistent across engine sample rates.
 //   v1.3.0
 //   - Stream polish Auto-Adapt now builds more progressively from open polish into firmer broadcast-style control.
 //   - At higher settings, Auto-Adapt adds more width, bass control, density, Shape, and peak protection while preserving useful low-end weight.

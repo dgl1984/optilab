@@ -43,14 +43,15 @@ before changing everything else.
 ## What is new in v1.3.1
 
 Version 1.3.1 keeps OptiLab Core's simple **Mode**, **Input**, and
-**Auto-Adapt** workflow while refining Stream polish's low-frequency decisions.
+**Auto-Adapt** workflow while improving Stream polish's low-end balance and
+stability.
 
-In **Stream polish**, Auto-Adapt now uses feedback from the existing bass path
-to fill moderately lean low end more intelligently. It withdraws sooner during
-repeated bass activity and persistent sub-rumble, reducing the risk of pumping
-while preserving the established strong-boost and bass-cut behavior.
+In **Stream polish**, Auto-Adapt now handles lean low end more intelligently
+while remaining conservative with repeated bass activity and persistent
+sub-rumble. The result is steadier low-frequency weight with less risk of
+pumping or unnecessary buildup.
 
-The final sample-delivery guard is also more consistent across engine sample
+Output-ceiling behavior is also more consistent across supported engine sample
 rates. **Podcast Leveler**, **Smooth Limiter**, and the visible interface remain
 unchanged.
 
