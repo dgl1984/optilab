@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Configure Win32
         run: cmake --preset vs2022-win32 -S native
@@ -90,7 +90,7 @@ jobs:
         run: Copy-Item -LiteralPath "native\build-winamp\Release\dsp_optilab_core.dll" -Destination "dist\dsp_optilab_core.dll"
 
       - name: Upload tested Winamp release candidate
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: optilab-core-winamp-dsp-x86
           path: |
@@ -106,7 +106,7 @@ jobs:
         run: Copy-Item -LiteralPath "native\build\Release\OptiLab_Core.clap" -Destination "dist\OptiLab_Core.clap"
 
       - name: Upload tested CLAP candidate
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: optilab-core-clap-x64
           path: |
@@ -124,16 +124,16 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Download tested release candidate
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: optilab-core-winamp-dsp-x86
           path: dist
 
       - name: Download tested CLAP candidate
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: optilab-core-clap-x64
           path: dist

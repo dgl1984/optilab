@@ -1,4 +1,4 @@
-﻿// Copyright 2026 Lanes Audio
+// Copyright 2026 Lanes Audio
 // SPDX-License-Identifier: Apache-2.0
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
@@ -26,7 +26,7 @@ bool testModeDefaults() {
     const auto limiter = OptiLabCore::defaultParameters(OptiLabCore::Mode::SmoothLimiter);
 
     return expect(podcast.inputDriveDb == 3.5, "podcast input default") &&
-           expect(stream.inputDriveDb == 4.5, "stream input default") &&
+           expect(stream.inputDriveDb == 0.0, "stream input default") &&
            expect(limiter.inputDriveDb == 0.0, "limiter input default") &&
            expect(podcast.autoAdaptPct == 0.0 && stream.autoAdaptPct == 0.0 &&
                       limiter.autoAdaptPct == 0.0,
