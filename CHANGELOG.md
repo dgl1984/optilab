@@ -1,4 +1,6 @@
-﻿# Changelog\n\n## OptiLab Core v1.3.0
+# Changelog
+
+## OptiLab Core v1.3.0
 
 Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially refining how **Auto-Adapt** behaves, especially in **Stream polish**. No new user controls are required.
 
