@@ -1,4 +1,4 @@
-﻿# OptiLab Core
+# OptiLab Core
 
 OptiLab Core is a free, accessible broadcast and mastering audio processor from
 LanesAudio. It combines leveling, density, tone control, saturation, limiting,
@@ -65,9 +65,18 @@ that conversion.
 
 Release downloads are available from the repository's GitHub Releases page.
 
-- REAPER users need `optilab_core.jsfx`.
-- 64-bit Windows CLAP hosts need `OptiLab-Core-1.3.0-CLAP-x64.zip`.
-- Winamp-compatible hosts need `OptiLab-Core-1.3.0-Winamp-DSP-x86.zip`.
+**Updating from a previous version?** Download the bare plug-in files and replace
+what you have — no extraction needed:
+
+- `OptiLab_Core.clap` — drop-in replacement for the 64-bit Windows CLAP plug-in.
+- `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
+- `optilab_core.jsfx` — drop-in replacement for REAPER users.
+
+**First time installing?** The ZIP archives include the plug-in plus documentation
+and a SHA-256 checksum file:
+
+- `OptiLab-Core-1.3.0-CLAP-x64.zip` — CLAP plug-in with docs.
+- `OptiLab-Core-1.3.0-Winamp-DSP-x86.zip` — Winamp DSP with docs.
 
 ## REAPER installation
 

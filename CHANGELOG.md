@@ -1,6 +1,4 @@
-﻿# Changelog
-
-## OptiLab Core v1.3.0
+﻿# Changelog\n\n## OptiLab Core v1.3.0
 
 Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially refining how **Auto-Adapt** behaves, especially in **Stream polish**. No new user controls are required.
 
@@ -26,9 +24,7 @@ Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially re
 - OptiLab Core v1.3.0 and later are source-available under the Apache License 2.0 with the Commons Clause License Condition v1.0.
 - Commercial use of OptiLab Core **as an audio-processing tool** is explicitly permitted, including paid production, mastering, broadcasting, streaming, podcasting, and other monetized audio work. No royalty is owed on audio processed with OptiLab Core.
 - Selling OptiLab Core itself, or a product or service whose value derives entirely or substantially from OptiLab Core's software functionality, requires separate permission from Lanes Audio.
-- Earlier releases remain under the license terms under which they were originally published.
-
-## OptiLab Core v1.2.0
+- Earlier releases remain under the license terms under which they were originally published.\n\n## OptiLab Core v1.2.0
 
 This release adds the first public 64-bit Windows CLAP build, corrects a
 user-reported fade at the beginning of playback, and carries OptiLab Core's
