@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure Win32
         run: cmake --preset vs2022-win32 -S native
@@ -82,7 +82,7 @@ jobs:
         run: ./scripts/package-all.ps1
 
       - name: Upload tested release candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: optilab-core-release-candidate
           path: |
@@ -101,10 +101,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download tested release candidate
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: optilab-core-release-candidate
           path: dist
