@@ -1,5 +1,40 @@
 # Changelog
 
+## OptiLab Core v1.3.1
+
+Version 1.3.1 is a focused maintenance release for **Stream polish**. It keeps
+the existing **Mode**, **Input**, and **Auto-Adapt** controls while making
+low-frequency adaptation more selective and output delivery more consistent.
+
+### Stream polish and Auto-Adapt
+
+- Refined Auto-Adapt's response to moderately lean low end by feeding the
+  result of the existing bass processing back into its control decision.
+- Added faster withdrawal during repeated kick and bass activity so the
+  downstream Density and Final stages are less likely to pump.
+- Added a persistent sub-rumble veto using information already produced by the
+  Stream high-pass filter, without adding another audio crossover.
+- Preserved the established strong-boost, bass-cut, lower-mid, Podcast Leveler,
+  and Smooth Limiter behavior covered by the release regression checks.
+
+### Output safety and efficiency
+
+- Reinforced the final **-0.1 dBFS** sample ceiling across supported engine
+  sample rates and tightened native float delivery at the ceiling boundary.
+- Hardened native sample-rate setup against invalid host values.
+- Avoided inactive JSFX feedback bookkeeping and disabled Winamp visual-meter
+  scans when the optional meters are off; these changes do not alter processed
+  samples.
+
+### Compatibility and workflow
+
+- The visible interface remains **Mode**, **Input**, and **Auto-Adapt**.
+- Native and JSFX state handling is aligned during live Auto-Adapt changes.
+- The release continues to provide REAPER JSFX, 64-bit Windows CLAP, and
+  32-bit Winamp-compatible DSP builds.
+- Hosts or encoders that resample after OptiLab Core can still create new peaks;
+  measure and limit after downstream sample-rate conversion when required.
+
 ## OptiLab Core v1.3.0
 
 Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially refining how **Auto-Adapt** behaves, especially in **Stream polish**. No new user controls are required.

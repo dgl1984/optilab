@@ -158,6 +158,36 @@ private:
         double cutAuthority = 0.0;
         double link = 0.0;
         double withdrawAuthority = 0.0;
+
+        // Closed-loop foundation refinement. The detector and actuator remain the
+        // existing Foundation Guard; these scalars only feed back the already
+        // computed post-bass density bands one control block later.
+        double feedbackB1Accum = 0.0;
+        double feedbackB2Accum = 0.0;
+        std::size_t feedbackCount = 0;
+        double feedbackRatioDb = -120.0;
+        double feedbackServoDb = 0.0;
+        double feedbackBurden = 0.0;
+
+        // Rumble veto reuses the low component already rejected by Stream's
+        // 42.5 Hz high-pass. It never creates another audio crossover.
+        double rumbleSubAccum = 0.0;
+        double rumbleTotalAccum = 0.0;
+        std::size_t rumbleCount = 0;
+        double rumbleRatioDb = -120.0;
+        double rumbleSubEnv = 0.0;
+        double rumbleTotalEnv = 0.0;
+        double rumbleState = 0.0;
+
+        double feedbackAttackTick = 0.0;
+        double feedbackReleaseTick = 0.0;
+        double feedbackFastReleaseTick = 0.0;
+        double feedbackBurdenAttackTick = 0.0;
+        double feedbackBurdenReleaseTick = 0.0;
+        double rumbleEnergyTick = 0.0;
+        double rumbleAttackTick = 0.0;
+        double rumbleReleaseTick = 0.0;
+        double feedbackMaxAssistDb = 12.0;
         void reset();
     };
 

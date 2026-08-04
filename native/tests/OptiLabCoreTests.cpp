@@ -3,11 +3,13 @@
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
 #include <algorithm>
+#include <array>
 #include "OptiLabCore.h"
 
 #include <cmath>
 #include <cstddef>
 #include <iostream>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -123,11 +125,71 @@ bool testStreamAdaptKeepsLoudnessHeadroom() {
                   "stream adapt must not trade loudness for extra crest against the ceiling");
 }
 
+bool testDeliveryCeilingAcrossSampleRates() {
+    constexpr std::array<double, 4> sampleRates{44100.0, 48000.0, 88200.0, 96000.0};
+    const float ceiling = std::nextafter(
+        static_cast<float>(std::pow(10.0, -0.1 / 20.0)), 0.0f);
+
+    for (const double sampleRate : sampleRates) {
+        OptiLabCore core;
+        auto parameters = OptiLabCore::defaultParameters(OptiLabCore::Mode::StreamPolish);
+        parameters.inputDriveDb = 18.0;
+        parameters.autoAdaptPct = 100.0;
+        core.setParameters(parameters);
+        core.prepare(sampleRate);
+
+        const std::size_t frames = static_cast<std::size_t>(sampleRate * 6.0);
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            const double t = static_cast<double>(frame) / sampleRate;
+            const double pulse = frame % 997 < 8 ? 0.95 : 0.0;
+            const float left = static_cast<float>(
+                0.82 * std::sin(2.0 * 3.14159265358979323846 * 47.0 * t) +
+                0.61 * std::sin(2.0 * 3.14159265358979323846 * 173.0 * t) + pulse);
+            const float right = static_cast<float>(
+                0.79 * std::cos(2.0 * 3.14159265358979323846 * 53.0 * t) +
+                0.58 * std::sin(2.0 * 3.14159265358979323846 * 281.0 * t) - pulse);
+            const auto output = core.processSample(left, right);
+            if (!std::isfinite(output.first) || !std::isfinite(output.second) ||
+                std::abs(output.first) > ceiling || std::abs(output.second) > ceiling) {
+                return expect(false,
+                              "native delivery must remain finite and within -0.1 dBFS");
+            }
+        }
+    }
+    return true;
+}
+
+bool testInvalidSampleRateFallsBackTo48k() {
+    OptiLabCore invalidRateCore;
+    OptiLabCore referenceCore;
+    auto parameters = OptiLabCore::defaultParameters(OptiLabCore::Mode::StreamPolish);
+    parameters.autoAdaptPct = 100.0;
+    invalidRateCore.setParameters(parameters);
+    referenceCore.setParameters(parameters);
+    invalidRateCore.prepare(std::numeric_limits<double>::quiet_NaN());
+    referenceCore.prepare(48000.0);
+
+    for (std::size_t frame = 0; frame < 4096; ++frame) {
+        const double t = static_cast<double>(frame) / 48000.0;
+        const float left = static_cast<float>(0.55 * std::sin(
+            2.0 * 3.14159265358979323846 * 233.0 * t));
+        const float right = static_cast<float>(0.47 * std::cos(
+            2.0 * 3.14159265358979323846 * 389.0 * t));
+        if (invalidRateCore.processSample(left, right) !=
+            referenceCore.processSample(left, right)) {
+            return expect(false, "invalid sample rate must use the 48 kHz fallback");
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
     const bool passed = testModeDefaults() && testPlanarMatchesInterleaved() &&
-                        testStreamAdaptKeepsLoudnessHeadroom();
+                        testStreamAdaptKeepsLoudnessHeadroom() &&
+                        testDeliveryCeilingAcrossSampleRates() &&
+                        testInvalidSampleRateFallsBackTo48k();
     if (passed) {
         std::cout << "OptiLab Core API tests passed.\n";
         return 0;

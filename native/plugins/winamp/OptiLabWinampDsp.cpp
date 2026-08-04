@@ -417,14 +417,20 @@ int modifySamples(WinampDspModule* module, short* samples, int frames, int bitsP
             optilab::winamp::decodeInterleaved(blockBytes, block, channels, bitsPerSample,
                                                 state->scratch.data());
         }
-        const double inputPeak = scratchPeak(state->scratch.data(), blockSamples);
+        const bool trackMeters =
+            targetVisualMeters.load(std::memory_order_relaxed) != 0;
+        const double inputPeak = trackMeters
+                                     ? scratchPeak(state->scratch.data(), blockSamples)
+                                     : 0.0;
         state->core.processInterleaved(state->scratch.data(), block, static_cast<std::size_t>(channels));
-        const double outputPeak = scratchPeak(state->scratch.data(), blockSamples);
-        publishPeak(meterInputMilliDb, peakToMilliDb(inputPeak));
-        publishPeak(meterOutputMilliDb, peakToMilliDb(outputPeak));
-        const int fullScale = fullScaleSamples(state->scratch.data(), blockSamples);
-        if (fullScale > 0) {
-            meterFullScaleSamples.fetch_add(fullScale, std::memory_order_relaxed);
+        if (trackMeters) {
+            const double outputPeak = scratchPeak(state->scratch.data(), blockSamples);
+            publishPeak(meterInputMilliDb, peakToMilliDb(inputPeak));
+            publishPeak(meterOutputMilliDb, peakToMilliDb(outputPeak));
+            const int fullScale = fullScaleSamples(state->scratch.data(), blockSamples);
+            if (fullScale > 0) {
+                meterFullScaleSamples.fetch_add(fullScale, std::memory_order_relaxed);
+            }
         }
         if (bitsPerSample == 16) {
             auto* blockPcm = samples + offset * static_cast<std::size_t>(channels);

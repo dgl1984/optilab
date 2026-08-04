@@ -40,13 +40,19 @@ important than an aggressive broadcast sound.
 Start gently. If the result becomes too flat, dense, or pushed, lower Input
 before changing everything else.
 
-## What is new in v1.3.0
+## What is new in v1.3.1
 
-Version 1.3.0 keeps OptiLab Core's simple **Mode**, **Input**, and **Auto-Adapt** workflow while making Auto-Adapt considerably more capable.
+Version 1.3.1 keeps OptiLab Core's simple **Mode**, **Input**, and
+**Auto-Adapt** workflow while refining Stream polish's low-frequency decisions.
 
-In **Stream polish**, lower Auto-Adapt settings remain relatively open. Raising Auto-Adapt progressively adds more width, bass control, density, Shape, and peak protection, moving toward firmer broadcast-style processing without simply driving every stage harder. The transition has also been refined so stronger low-frequency cleanup does not unnecessarily thin useful bass weight or punch.
+In **Stream polish**, Auto-Adapt now uses feedback from the existing bass path
+to fill moderately lean low end more intelligently. It withdraws sooner during
+repeated bass activity and persistent sub-rumble, reducing the risk of pumping
+while preserving the established strong-boost and bass-cut behavior.
 
-**Smooth Limiter** also receives improved peak handling while retaining its focused mastering-style role. The visible interface remains unchanged.
+The final sample-delivery guard is also more consistent across engine sample
+rates. **Podcast Leveler**, **Smooth Limiter**, and the visible interface remain
+unchanged.
 
 ## Output ceiling and sample rates
 
@@ -72,7 +78,7 @@ what you have — no extraction needed:
 - `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
 - `optilab_core.jsfx` — drop-in replacement for REAPER users.
 
-**Complete Package:** Download `OptiLab-Core-1.3.0.zip` to get all three plug-in formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`), documentation, and SHA-256 checksums in a single archive.
+**Complete Package:** Download `OptiLab-Core-1.3.1.zip` to get all three plug-in formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`), documentation, and SHA-256 checksums in a single archive.
 
 ## REAPER installation
 
@@ -84,7 +90,7 @@ what you have — no extraction needed:
 
 ## CLAP installation
 
-1. Download `OptiLab-Core-1.3.0.zip` (and extract `OptiLab_Core.clap`), or download `OptiLab_Core.clap` directly.
+1. Download `OptiLab-Core-1.3.1.zip` (and extract `OptiLab_Core.clap`), or download `OptiLab_Core.clap` directly.
 2. Close the CLAP host.
 3. Copy `OptiLab_Core.clap` to
    `%LOCALAPPDATA%\Programs\Common\CLAP`.
@@ -99,10 +105,10 @@ The Windows DLL uses the classic 32-bit Winamp DSP/Effect interface. It can be
 used by Winamp and by compatible Windows broadcast applications that support
 Winamp DSP plug-ins.
 
-1. Download `OptiLab-Core-1.3.0.zip` (and extract `dsp_optilab_core.dll`), or download `dsp_optilab_core.dll` directly.
+1. Download `OptiLab-Core-1.3.1.zip` (and extract `dsp_optilab_core.dll`), or download `dsp_optilab_core.dll` directly.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
-4. Restart the host and select **OptiLab Core 1.3.0** in its DSP configuration.
+4. Restart the host and select **OptiLab Core 1.3.1** in its DSP configuration.
 
 Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
 require administrator approval. Other hosts choose their own plug-in folders.

@@ -1,10 +1,16 @@
 // @description OptiLab Core
-// @version 1.3.0
+// @version 1.3.1
 // @author LanesAudio
 // @about
 //   OptiLab Core is a three-control broadcast and mastering processor.
-//   v1.3.0 keeps the established Podcast Leveler behavior while expanding Stream polish Auto-Adapt.
+//   v1.3.1 adds feedback-refined low-frequency control and sample-rate-safe output delivery.
 // @changelog
+//   v1.3.1
+//   - Added slow post-bass feedback refinement for moderately lean Stream material.
+//   - Added activity burden withdrawal so rapid kick/bass trains do not overload downstream Density/Final processing.
+//   - Added a persistent sub-rumble veto using the Stream HPF rejection signal; no extra crossover is created.
+//   - Feedback assist remains bounded and normally operates conservatively.
+//   - Reinforced sample-rate-change state reset and final -0.1 dBFS sample-peak delivery guard.
 //   v1.3.0
 //   - Stream polish Auto-Adapt now builds more progressively from open polish into firmer broadcast-style control.
 //   - At higher settings, Auto-Adapt adds more width, bass control, density, Shape, and peak protection while preserving useful low-end weight.
@@ -15,7 +21,7 @@
 // @license Apache-2.0 with Commons Clause (https://commonsclause.com/). See LICENSE.
 // @provides
 //   optilab_core.jsfx
-desc:OptiLab Core v1.3.0 (LanesAudio)
+desc:OptiLab Core v1.3.1 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
@@ -554,6 +560,19 @@ function reset_dynamic_state() local(i)
   adapt_bass_model_useful_boost_state_db = 0;
   adapt_bass_model_deep_cut_state_db = 0;
   adapt_bass_model_useful_cut_state_db = 0;
+  adapt_bass_feedback_b1_accum = 0;
+  adapt_bass_feedback_b2_accum = 0;
+  adapt_bass_feedback_count = 0;
+  adapt_bass_feedback_ratio_db = -120;
+  adapt_bass_feedback_servo_db = 0;
+  adapt_bass_feedback_burden = 0;
+  adapt_bass_feedback_rumble_sub_accum = 0;
+  adapt_bass_feedback_rumble_total_accum = 0;
+  adapt_bass_feedback_rumble_count = 0;
+  adapt_bass_feedback_rumble_ratio_db = -120;
+  adapt_bass_feedback_rumble_sub_env = 0;
+  adapt_bass_feedback_rumble_total_env = 0;
+  adapt_bass_feedback_rumble_state = 0;
   adapt_bass_model_70_l.x1 = 0; adapt_bass_model_70_l.x2 = 0; adapt_bass_model_70_l.y1 = 0; adapt_bass_model_70_l.y2 = 0;
   adapt_bass_model_70_r.x1 = 0; adapt_bass_model_70_r.x2 = 0; adapt_bass_model_70_r.y1 = 0; adapt_bass_model_70_r.y2 = 0;
   adapt_bass_model_250_l.x1 = 0; adapt_bass_model_250_l.x2 = 0; adapt_bass_model_250_l.y1 = 0; adapt_bass_model_250_l.y2 = 0;
@@ -1179,6 +1198,16 @@ function update_derived_params() local(dpos dneg)
   adapt_bass_model_voice_return = exp(-1/(srate_safe * 2.200));
   adapt_bass_model_voice_withdraw = exp(-1/(srate_safe * 0.300));
 
+  adapt_bass_feedback_attack_tick = exp(-16/(srate_safe * 1.600));
+  adapt_bass_feedback_release_tick = exp(-16/(srate_safe * 4.000));
+  adapt_bass_feedback_fast_release_tick = exp(-16/(srate_safe * 0.250));
+  adapt_bass_feedback_burden_attack_tick = exp(-16/(srate_safe * 0.300));
+  adapt_bass_feedback_burden_release_tick = exp(-16/(srate_safe * 1.200));
+  adapt_bass_feedback_rumble_energy_tick = exp(-16/(srate_safe * 0.250));
+  adapt_bass_feedback_rumble_attack_tick = exp(-16/(srate_safe * 0.650));
+  adapt_bass_feedback_rumble_release_tick = exp(-16/(srate_safe * 2.000));
+  adapt_bass_feedback_max_assist_db = 12.0;
+
   adapt_bass_amount = adaptive_bass_coupling;
   adapt_bass_boost_scale = adaptive_bass_boost_curve(adapt_bass_amount);
   adapt_bass_cut_authority = adaptive_bass_cut_curve(adapt_bass_amount);
@@ -1479,7 +1508,7 @@ w = core_stage(a,0.00,0.35);
 b = core_stage(a,0.18,0.82);
 g = core_stage(a,0.35,0.88);
 d = core_stage(a,0.50,0.78);
-h = core_stage(a,0.50,0.80); // Broadcast Shape now tracks the Stream 42.5 Hz HPF progression.
+h = core_stage(a,0.50,0.80);
 f = core_stage(a,0.50,1.00);
 stream_foundation_mix = core_mode == 1 ? b : 0;
 stream_hpf_mix = core_mode == 1 ? core_stage(a,0.50,0.80) : 0;
@@ -1759,6 +1788,19 @@ adaptive_bass_foundation_guard_active != adaptive_bass_foundation_guard_active_l
   adapt_bass_model_useful_boost_state_db = 0;
   adapt_bass_model_deep_cut_state_db = 0;
   adapt_bass_model_useful_cut_state_db = 0;
+  adapt_bass_feedback_b1_accum = 0;
+  adapt_bass_feedback_b2_accum = 0;
+  adapt_bass_feedback_count = 0;
+  adapt_bass_feedback_ratio_db = -120;
+  adapt_bass_feedback_servo_db = 0;
+  adapt_bass_feedback_burden = 0;
+  adapt_bass_feedback_rumble_sub_accum = 0;
+  adapt_bass_feedback_rumble_total_accum = 0;
+  adapt_bass_feedback_rumble_count = 0;
+  adapt_bass_feedback_rumble_ratio_db = -120;
+  adapt_bass_feedback_rumble_sub_env = 0;
+  adapt_bass_feedback_rumble_total_env = 0;
+  adapt_bass_feedback_rumble_state = 0;
   adapt_bass_model_deep_target_cached = 1;
   adapt_bass_model_useful_target_cached = 1;
   adapt_bass_model_deep_target_db_cached = 0;
@@ -1870,6 +1912,14 @@ input_section_mode == 3 ? (
   core_mode == 1 ? (
     hpl = hp30_l.onepole_hp(l_in, hpf30_a);
     hpr = hp30_r.onepole_hp(r_in, hpf30_a);
+    adaptive_bass_foundation_guard_active ? (
+      abm_rumble_reject_l = l_in - hpl;
+      abm_rumble_reject_r = r_in - hpr;
+      adapt_bass_feedback_rumble_sub_accum += (abm_rumble_reject_l*abm_rumble_reject_l
+                                             + abm_rumble_reject_r*abm_rumble_reject_r) * 0.5;
+      adapt_bass_feedback_rumble_total_accum += (l_in*l_in + r_in*r_in) * 0.5;
+      adapt_bass_feedback_rumble_count += 1;
+    );
     l = l_in + (hpl-l_in)*stream_hpf_mix;
     r = r_in + (hpr-r_in)*stream_hpf_mix;
   ) : subsonic_hpf ? (
@@ -2179,6 +2229,40 @@ adaptive_bass_foundation_guard_active ? (
   abm_slow_mid_energy = adapt_bass_model_slow_mid_env.peak_env(abm_mid_power, adapt_bass_model_slow_attack, adapt_bass_model_slow_release);
 
   adaptive_cpu_tick ? (
+    adapt_bass_feedback_rumble_count > 0 ? (
+      abm_rumble_sub_energy = adapt_bass_feedback_rumble_sub_accum / adapt_bass_feedback_rumble_count;
+      abm_rumble_total_energy = adapt_bass_feedback_rumble_total_accum / adapt_bass_feedback_rumble_count;
+      adapt_bass_feedback_rumble_sub_env = abm_rumble_sub_energy
+                                         + adapt_bass_feedback_rumble_energy_tick
+                                         * (adapt_bass_feedback_rumble_sub_env - abm_rumble_sub_energy);
+      adapt_bass_feedback_rumble_total_env = abm_rumble_total_energy
+                                           + adapt_bass_feedback_rumble_energy_tick
+                                           * (adapt_bass_feedback_rumble_total_env - abm_rumble_total_energy);
+      adapt_bass_feedback_rumble_ratio_db = lin2db(sqrt(max(adapt_bass_feedback_rumble_sub_env, 0.000000000001)
+                                                     / max(adapt_bass_feedback_rumble_total_env, 0.000000000001)));
+    );
+    adapt_bass_feedback_rumble_sub_accum = 0;
+    adapt_bass_feedback_rumble_total_accum = 0;
+    adapt_bass_feedback_rumble_count = 0;
+    abm_rumble_target = smoothstep01((adapt_bass_feedback_rumble_ratio_db + 5.0) / 2.0);
+    abm_rumble_coeff = abm_rumble_target > adapt_bass_feedback_rumble_state
+                     ? adapt_bass_feedback_rumble_attack_tick
+                     : adapt_bass_feedback_rumble_release_tick;
+    adapt_bass_feedback_rumble_state = abm_rumble_target
+                                     + abm_rumble_coeff
+                                     * (adapt_bass_feedback_rumble_state - abm_rumble_target);
+    abm_feedback_rumble_room = 1 - adapt_bass_feedback_rumble_state;
+
+    adapt_bass_feedback_count > 0 ? (
+      abm_feedback_b1_energy = adapt_bass_feedback_b1_accum / adapt_bass_feedback_count;
+      abm_feedback_b2_energy = adapt_bass_feedback_b2_accum / adapt_bass_feedback_count;
+      adapt_bass_feedback_ratio_db = lin2db(sqrt(max(abm_feedback_b1_energy, 0.000000000001)
+                                                 / max(abm_feedback_b2_energy, 0.000000000001)));
+    );
+    adapt_bass_feedback_b1_accum = 0;
+    adapt_bass_feedback_b2_accum = 0;
+    adapt_bass_feedback_count = 0;
+
     abm_valid_program = abm_fast_mid_energy > 0.000000000001 && abm_program_det >= 0.00003;
     abm_valid_program ? (
       abm_fast_deep_ratio_db = lin2db(sqrt(max(abm_fast_deep_energy, 0.000000000001) / max(abm_fast_mid_energy, 0.000000000001)));
@@ -2295,6 +2379,49 @@ adaptive_bass_foundation_guard_active ? (
       abm_deep_target_db = adapt_bass_model_deep_raw_db + (abm_shared_db - adapt_bass_model_deep_raw_db) * (0.10 * adapt_bass_lab_link);
       abm_useful_target_db = adapt_bass_model_useful_raw_db + (abm_shared_db - adapt_bass_model_useful_raw_db) * (0.10 * adapt_bass_lab_link);
     );
+
+    abm_feedback_eligible = abm_valid_program
+                          && adapt_bass_model_age_samples >= floor(srate_safe * 5.0 + 0.5) ? 1 : 0;
+    abm_feedback_moderate = smoothstep01((abm_deep_target_db - 0.8) / 1.0)
+                          * (1 - smoothstep01((abm_deep_target_db - 3.4) / 0.8));
+    abm_feedback_deep_lean = 1 - smoothstep01((abm_slow_deep_ratio_db + 4.5) / 1.5);
+    abm_feedback_body_lean = smoothstep01((-1.0 - abm_slow_useful_ratio_db) / 0.6);
+    abm_feedback_no_cut = 1 - smoothstep01(abm_global_cut_target_db / 0.25);
+
+    abm_feedback_post_room = 1 - smoothstep01((adapt_bass_feedback_ratio_db - 3.2) / 0.8);
+    abm_feedback_post_excess = smoothstep01((adapt_bass_feedback_ratio_db - 3.0) / 2.0);
+    abm_feedback_burden_coeff = abm_feedback_post_excess > adapt_bass_feedback_burden
+                              ? adapt_bass_feedback_burden_attack_tick
+                              : adapt_bass_feedback_burden_release_tick;
+    adapt_bass_feedback_burden = abm_feedback_post_excess
+                               + abm_feedback_burden_coeff
+                               * (adapt_bass_feedback_burden - abm_feedback_post_excess);
+    abm_feedback_activity_room = 1 - smoothstep01((adapt_bass_feedback_burden - 0.30) / 0.45);
+
+    abm_feedback_request_db = adapt_bass_feedback_max_assist_db
+                            * abm_feedback_eligible
+                            * abm_feedback_moderate
+                            * abm_feedback_deep_lean
+                            * abm_feedback_body_lean
+                            * abm_feedback_no_cut
+                            * abm_feedback_post_room
+                            * abm_feedback_activity_room
+                            * abm_feedback_rumble_room;
+
+    abm_feedback_force_release = !abm_valid_program
+                              || abm_global_cut_target_db > 0.10
+                              || abm_slow_deep_ratio_db > -3.5
+                              || abm_slow_useful_ratio_db > -0.20
+                              || adapt_bass_feedback_burden > 0.62
+                              || adapt_bass_feedback_rumble_state > 0.50;
+    abm_feedback_coeff = abm_feedback_request_db > adapt_bass_feedback_servo_db
+                      ? adapt_bass_feedback_attack_tick
+                      : abm_feedback_force_release
+                        ? adapt_bass_feedback_fast_release_tick
+                        : adapt_bass_feedback_release_tick;
+    adapt_bass_feedback_servo_db = abm_feedback_request_db
+                                 + abm_feedback_coeff * (adapt_bass_feedback_servo_db - abm_feedback_request_db);
+    abm_deep_target_db += adapt_bass_feedback_servo_db;
 
     abm_withdraw_pos = smoothstep01(clamp(abm_global_cut_target_db / 3.5, 0, 1));
     abm_voice_target = 1 - clamp(adapt_bass_withdraw_authority * abm_withdraw_pos, 0, 1);
@@ -2496,6 +2623,12 @@ crossover_model == 3 ? (
   rem_r -= b4_r;
   b5_r = xb5_r.onepole_lp(rem_r, x5_a);
   b6_r = rem_r - b5_r;
+);
+
+adaptive_bass_foundation_guard_active ? (
+  adapt_bass_feedback_b1_accum += (b1_l*b1_l + b1_r*b1_r) * 0.5;
+  adapt_bass_feedback_b2_accum += (b2_l*b2_l + b2_r*b2_r) * 0.5;
+  adapt_bass_feedback_count += 1;
 );
 
 adaptive_top_coupling > 0 ? (
@@ -3542,6 +3675,8 @@ final_section_mode == 3 ? (
 ) : (
   normal_out_l = final_section_proc_l;
   normal_out_r = final_section_proc_r;
+  normal_out_l = hard_limit(normal_out_l, ceiling);
+  normal_out_r = hard_limit(normal_out_r, ceiling);
 );
 
 meter_out_peak_l = max(meter_out_peak_l, abs(normal_out_l));

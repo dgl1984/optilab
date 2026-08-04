@@ -7,6 +7,10 @@
 
 #include <windows.h>
 
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -102,6 +106,42 @@ int wmain(int argc, wchar_t** argv) {
         module->quit(module);
         FreeLibrary(library);
         return 1;
+    }
+
+    char* benchmarkSeconds = nullptr;
+    std::size_t benchmarkValueLength = 0;
+    _dupenv_s(&benchmarkSeconds, &benchmarkValueLength,
+              "OPTILAB_BENCHMARK_SECONDS");
+    if (benchmarkSeconds) {
+        const double requestedSeconds = std::max(1.0, std::atof(benchmarkSeconds));
+        const std::uint64_t blocks = static_cast<std::uint64_t>(
+            std::ceil(requestedSeconds * 48000.0 / frames));
+        std::uint64_t outputHash = 1469598103934665603ull;
+        const auto start = std::chrono::steady_clock::now();
+        for (std::uint64_t block = 0; block < blocks; ++block) {
+            if (module->modifySamples(module, reinterpret_cast<short*>(samples.data()),
+                                      frames, 16, 2, 48000) != frames) {
+                std::cerr << "FAIL: benchmark processing callback failed\n";
+                std::free(benchmarkSeconds);
+                module->quit(module);
+                FreeLibrary(library);
+                return 1;
+            }
+            for (const std::int16_t sample : samples) {
+                const auto bits = static_cast<std::uint16_t>(sample);
+                outputHash = (outputHash ^ bits) * 1099511628211ull;
+            }
+        }
+        const double elapsed = std::chrono::duration<double>(
+                                   std::chrono::steady_clock::now() - start)
+                                   .count();
+        const double audioSeconds =
+            static_cast<double>(blocks * frames) / 48000.0;
+        std::cout << "BENCHMARK audio_seconds=" << audioSeconds
+                  << " elapsed_seconds=" << elapsed
+                  << " realtime_multiple=" << audioSeconds / elapsed
+                  << " output_hash=" << outputHash << '\n';
+        std::free(benchmarkSeconds);
     }
     module->quit(module);
     if (samples == original) {
