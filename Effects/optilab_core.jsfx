@@ -1,4 +1,4 @@
-// @description OptiLab Core
+﻿// @description OptiLab Core
 // @version 1.3.0
 // @author LanesAudio
 // @about
@@ -12,7 +12,8 @@
 // @link
 //   Donations: https://paypal.me/dgl1984
 //   Contact: info@lanesaudio.com
-// @provides
+// @license Apache-2.0 with Commons Clause (https://commonsclause.com/). See LICENSE.
+@provides
 //   optilab_core.jsfx
 desc:OptiLab Core v1.3.0 (LanesAudio)
 
