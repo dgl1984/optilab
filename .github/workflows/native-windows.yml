@@ -77,42 +77,19 @@ jobs:
             throw "The Release CLAP depends on the dynamic Microsoft C/C++ runtime."
           }
 
-      - name: Package Winamp DSP
+      - name: Package all plug-in candidates
         shell: pwsh
-        run: ./scripts/package-winamp.ps1
+        run: ./scripts/package-all.ps1
 
-      - name: Package CLAP candidate
-        shell: pwsh
-        run: ./scripts/package-clap.ps1
-
-      - name: Stage bare Winamp DLL for direct download
-        shell: pwsh
-        run: Copy-Item -LiteralPath "native\build-winamp\Release\dsp_optilab_core.dll" -Destination "dist\dsp_optilab_core.dll"
-
-      - name: Upload tested Winamp release candidate
+      - name: Upload tested release candidate
         uses: actions/upload-artifact@v4
         with:
-          name: optilab-core-winamp-dsp-x86
+          name: optilab-core-release-candidate
           path: |
-            dist/*-Winamp-DSP-x86.zip
+            dist/OptiLab-Core-*.zip
             dist/OptiLab-Core-*-SHA256.txt
-            dist/OptiLab-Core-*-JSFX-SHA256.txt
-            dist/dsp_optilab_core.dll
-            !dist/*-CLAP-x64-SHA256.txt
-          if-no-files-found: error
-
-      - name: Stage bare CLAP for direct download
-        shell: pwsh
-        run: Copy-Item -LiteralPath "native\build\Release\OptiLab_Core.clap" -Destination "dist\OptiLab_Core.clap"
-
-      - name: Upload tested CLAP candidate
-        uses: actions/upload-artifact@v4
-        with:
-          name: optilab-core-clap-x64
-          path: |
-            dist/*-CLAP-x64.zip
-            dist/*-CLAP-x64-SHA256.txt
             dist/OptiLab_Core.clap
+            dist/dsp_optilab_core.dll
           if-no-files-found: error
 
   release:
@@ -129,13 +106,7 @@ jobs:
       - name: Download tested release candidate
         uses: actions/download-artifact@v4
         with:
-          name: optilab-core-winamp-dsp-x86
-          path: dist
-
-      - name: Download tested CLAP candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: optilab-core-clap-x64
+          name: optilab-core-release-candidate
           path: dist
 
       - name: Create GitHub release
@@ -161,8 +132,7 @@ jobs:
             (Resolve-Path "dist\optilab_core.jsfx").Path
             (Resolve-Path "dist\OptiLab_Core.clap").Path
             (Resolve-Path "dist\dsp_optilab_core.dll").Path
-            (Resolve-Path "dist\OptiLab-Core-$version-CLAP-x64.zip").Path
-            (Resolve-Path "dist\OptiLab-Core-$version-Winamp-DSP-x86.zip").Path
+            (Resolve-Path "dist\OptiLab-Core-$version.zip").Path
           )
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -eq 0) {

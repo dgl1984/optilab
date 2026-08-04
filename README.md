@@ -72,11 +72,7 @@ what you have — no extraction needed:
 - `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
 - `optilab_core.jsfx` — drop-in replacement for REAPER users.
 
-**First time installing?** The ZIP archives include the plug-in plus documentation
-and a SHA-256 checksum file:
-
-- `OptiLab-Core-1.3.0-CLAP-x64.zip` — CLAP plug-in with docs.
-- `OptiLab-Core-1.3.0-Winamp-DSP-x86.zip` — Winamp DSP with docs.
+**Complete Package:** Download `OptiLab-Core-1.3.0.zip` to get all three plug-in formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`), documentation, and SHA-256 checksums in a single archive.
 
 ## REAPER installation
 
