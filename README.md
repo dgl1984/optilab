@@ -1,4 +1,4 @@
-# OptiLab Core
+﻿# OptiLab Core
 
 OptiLab Core is a free, accessible broadcast and mastering audio processor from
 LanesAudio. It combines leveling, density, tone control, saturation, limiting,
@@ -40,19 +40,13 @@ important than an aggressive broadcast sound.
 Start gently. If the result becomes too flat, dense, or pushed, lower Input
 before changing everything else.
 
-## What is new in v1.2.0
+## What is new in v1.3.0
 
-Version 1.2.0 adds the first public 64-bit Windows CLAP build while keeping the
-same Mode, Input, and Auto-Adapt workflow across formats.
+Version 1.3.0 keeps OptiLab Core's simple **Mode**, **Input**, and **Auto-Adapt** workflow while making Auto-Adapt considerably more capable.
 
-It fixes a user-reported short fade-in at the beginning of playback. The CLAP
-build reports its latency correctly, preserves matching rendered output, and
-uses standard parameters that hosts and OSARA can expose without opening the
-custom editor.
+In **Stream polish**, lower Auto-Adapt settings remain relatively open. Raising Auto-Adapt progressively adds more width, bass control, density, Shape, and peak protection, moving toward firmer broadcast-style processing without simply driving every stage harder. The transition has also been refined so stronger low-frequency cleanup does not unnecessarily thin useful bass weight or punch.
 
-The resizable CLAP editor uses native controls, exact dB text, keyboard
-operation, and REAPER-specific window parenting informed by App2Clap so focus,
-Tab navigation, and mouse hit testing reach the controls immediately.
+**Smooth Limiter** also receives improved peak handling while retaining its focused mastering-style role. The visible interface remains unchanged.
 
 ## Output ceiling and sample rates
 
@@ -72,8 +66,8 @@ that conversion.
 Release downloads are available from the repository's GitHub Releases page.
 
 - REAPER users need `optilab_core.jsfx`.
-- 64-bit Windows CLAP hosts need `OptiLab-Core-1.2.0-CLAP-x64.zip`.
-- Winamp-compatible hosts need `OptiLab-Core-1.2.0-Winamp-DSP-x86.zip`.
+- 64-bit Windows CLAP hosts need `OptiLab-Core-1.3.0-CLAP-x64.zip`.
+- Winamp-compatible hosts need `OptiLab-Core-1.3.0-Winamp-DSP-x86.zip`.
 
 ## REAPER installation
 
@@ -85,7 +79,7 @@ Release downloads are available from the repository's GitHub Releases page.
 
 ## CLAP installation
 
-1. Download and extract `OptiLab-Core-1.2.0-CLAP-x64.zip`.
+1. Download and extract `OptiLab-Core-1.3.0-CLAP-x64.zip`.
 2. Close the CLAP host.
 3. Copy `OptiLab_Core.clap` to
    `%LOCALAPPDATA%\Programs\Common\CLAP`.
@@ -103,7 +97,7 @@ Winamp DSP plug-ins.
 1. Download and extract the Winamp DSP ZIP from the latest release.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
-4. Restart the host and select **OptiLab Core 1.2.0** in its DSP configuration.
+4. Restart the host and select **OptiLab Core 1.3.0** in its DSP configuration.
 
 Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
 require administrator approval. Other hosts choose their own plug-in folders.
@@ -133,8 +127,10 @@ Questions, bug reports, and accessibility feedback: `info@lanesaudio.com`
 
 ## License
 
-OptiLab Core is released under the Apache License 2.0. You may use, modify, and
-redistribute it under the terms of the included [`LICENSE`](LICENSE) file.
+OptiLab Core v1.3.0 and later are **source-available** under the Apache License 2.0 with the Commons Clause License Condition v1.0. See [LICENSE](LICENSE).
 
-If you distribute a modified version, clearly identify it as modified from the
-original LanesAudio OptiLab Core release.
+You are explicitly welcome to use OptiLab Core for personal or commercial **audio work**. This includes paid production and mastering, commercial radio and broadcasting, monetized streams and podcasts, released music, and similar work. Lanes Audio claims no royalty or ownership interest in audio merely because OptiLab Core processed it.
+
+The source may be inspected, studied, modified, and redistributed subject to the license. However, the license does **not** permit selling OptiLab Core itself, a rebranded or lightly modified version of it, or another product or service whose value derives entirely or substantially from OptiLab Core's software functionality. Contact `info@lanesaudio.com` to discuss a separate commercial software license.
+
+OptiLab Core releases published before v1.3.0 remain under the license terms under which those versions were originally released.

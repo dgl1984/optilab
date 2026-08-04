@@ -1,4 +1,32 @@
-# Changelog
+﻿# Changelog
+
+## OptiLab Core v1.3.0
+
+Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially refining how **Auto-Adapt** behaves, especially in **Stream polish**. No new user controls are required.
+
+### Stream polish and Auto-Adapt
+
+- Low Auto-Adapt settings keep Stream polish relatively open and familiar.
+- As Auto-Adapt rises, Stream polish progressively adds more width, bass control, density, Shape, and peak protection instead of simply pushing the whole processor harder.
+- The Shape progression now arrives earlier and more naturally alongside the stronger low-frequency cleanup at higher Auto-Adapt settings, helping preserve useful bass weight and punch through the transition.
+- Higher Auto-Adapt settings provide firmer broadcast-style control while keeping the output ceiling at **-0.1 dBFS**.
+
+### Smooth Limiter
+
+- Improved peak handling while retaining Smooth Limiter's focused mastering-style role and the same simple controls.
+
+### Compatibility and workflow
+
+- The visible interface remains **Mode**, **Input**, and **Auto-Adapt**.
+- Podcast Leveler keeps its established role and workflow.
+- Native and JSFX builds are intended to follow the same Core processing design.
+
+### Licensing
+
+- OptiLab Core v1.3.0 and later are source-available under the Apache License 2.0 with the Commons Clause License Condition v1.0.
+- Commercial use of OptiLab Core **as an audio-processing tool** is explicitly permitted, including paid production, mastering, broadcasting, streaming, podcasting, and other monetized audio work. No royalty is owed on audio processed with OptiLab Core.
+- Selling OptiLab Core itself, or a product or service whose value derives entirely or substantially from OptiLab Core's software functionality, requires separate permission from Lanes Audio.
+- Earlier releases remain under the license terms under which they were originally published.
 
 ## OptiLab Core v1.2.0
 
@@ -185,7 +213,7 @@ Older startup peak-catch behavior has been retired. This helps Core rely more na
 
 ### Screen-reader wording improvement
 
-The Stream mode is now written as **Stream polish** instead of **Stream Polish**. This avoids a confusing pronunciation issue in some screen readers and text-to-speech voices, where the capitalized word could be read as “Polish” referring to Poland rather than “polish” as in audio polish.
+The Stream mode is now written as **Stream polish** instead of **Stream Polish**. This avoids a confusing pronunciation issue in some screen readers and text-to-speech voices, where the capitalized word could be read as â€œPolishâ€ referring to Poland rather than â€œpolishâ€ as in audio polish.
 
 ### Smooth Limiter unchanged
 

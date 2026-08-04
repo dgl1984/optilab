@@ -1,43 +1,20 @@
 // @description OptiLab Core
-// @version 1.2.0
+// @version 1.3.0
 // @author LanesAudio
 // @about
-//   OptiLab Core is a JSFX audio processor for REAPER.
-//   It brings leveling, density, tone control, saturation, and limiting together.
+//   OptiLab Core is a three-control broadcast and mastering processor.
+//   v1.3.0 keeps the established Podcast Leveler behavior while expanding Stream polish Auto-Adapt.
 // @changelog
-//   v1.2.0
-//   - Fixed the user-reported short fade-in at the beginning of playback.
-//   - Added the matching accessible 64-bit Windows CLAP release.
-//   - Preserved the established three-control workflow and processing behavior.
-//   v1.1.2
-//   - Added opt-in Winamp visual meters, off by default for accessibility.
-//   v1.1.1
-//   - Added Winamp DSP metering and host-calibrated Stream polish default.
-//   - Updated native build/release workflow.
-//   v1.1.0
-//   - Corrected Stream polish and Smooth Limiter tuning.
-//   - Reduced inactive sample-path work without changing output.
-//   - Added the matching native Core and Winamp DSP release.
-//   v1.0.3
-//   - Refined Auto-Adapt behavior in Podcast Leveler and Stream polish.
-//   - Improved handling of spoken-word material with pauses between phrases.
-//   - Reduced chunky, recorder-like auto-gain artifacts on difficult speech.
-//   - Improved high Auto-Adapt behavior in Podcast Leveler so it stays controlled and less clip-driven.
-//   - Kept Stream polish familiar at low Auto-Adapt settings while making higher settings smoother and more stable.
-//   - Retired older startup peak-catch behavior for cleaner level transitions.
-//   - Updated Stream polish wording for better screen-reader and TTS pronunciation.
-//   - Kept the simple three-control Core interface.
-//   v1.0.1
-//   - Fixed Input Drive resetting to the mode default on play/stop/render/reinit.
-//   v1.0
-//   - Initial release
+//   v1.3.0
+//   - Stream polish Auto-Adapt now builds more progressively from open polish into firmer broadcast-style control.
+//   - At higher settings, Auto-Adapt adds more width, bass control, density, Shape, and peak protection while preserving useful low-end weight.
+//   - Smooth Limiter has improved peak control while keeping the same simple three-control workflow.
 // @link
 //   Donations: https://paypal.me/dgl1984
 //   Contact: info@lanesaudio.com
 // @provides
 //   optilab_core.jsfx
-
-desc:OptiLab Core v1.2.0 (LanesAudio)
+desc:OptiLab Core v1.3.0 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
@@ -48,26 +25,27 @@ out_pin:left output
 out_pin:right output
 
 @init
+srate_safe = (srate >= 8000 && srate <= 768000) ? srate : 48000;
 ext_tail_size = -2;
-
-core_last_mode = -1;
-core_initial_apply = 1;
 
 agc_lgain = 1;
 agc_hgain = 1;
 final_threshold_drive_s = 1;
+final_threshold_guard_gain = 1;
 
+gui_tab = 0;
+gui_active_slider = -1;
+gui_drag_start_y = 0;
+gui_drag_start_x = 0;
+gui_drag_start_val = 0;
+gui_last_mouse_cap = 0;
+gui_menu_active = 0;
 gui_peak_in_l_sample = 0;
 gui_peak_in_r_sample = 0;
 gui_peak_in_l = 0;
 gui_peak_in_r = 0;
 gui_peak_hold_in = 20000;
 20000[] = -60;
-gui_gr_agc = 0;
-gui_gr_density = 0;
-gui_gr_final = 0;
-gui_active_slider = -1;
-gui_last_mouse_down = 0;
 gui_theme_bg = 0x101316;
 gui_theme_panel = 0x181D22;
 gui_theme_accent = 0x14B8D4;
@@ -79,11 +57,19 @@ gui_theme_warning = 0xFACC15;
 gui_theme_safe = 0x22C55E;
 gui_theme_danger = 0xEF4444;
 
-agc_low_eff_gain = 1;
-agc_high_eff_gain = 1;
-g1 = g2 = g3 = g4 = g5 = g6 = 1;
-dynamic_clip_gain = 1;
-pre_tgain = 1;
+processor_mode = 0;
+
+snubber_lookahead_ms = 0;
+lookahead_ms = 1.5;
+preset_default_snubber_lookahead_ms = snubber_lookahead_ms;
+preset_default_final_lookahead_ms = lookahead_ms;
+
+crossover_model = 2;
+
+fm_preemph_mode_last = fm_preemph_mode;
+stereo_mode_last = stereo_mode;
+stereo_width_pct_last = stereo_width_pct;
+stereo_section_mode_last = stereo_section_mode;
 
 fcs_buf_len = 512;
 fcs_buf_l = 0;
@@ -101,6 +87,15 @@ snub_p4_l = 5120;  snub_p4_r = 5632;
 snub_p5_l = 6144;  snub_p5_r = 6656;
 snub_p6_l = 7168;  snub_p6_r = 7680;
 
+diag_xt2_buf_len = 512;
+diag_xt2_l = 8192;
+diag_xt2_r = 8704;
+diag_xt2_wrpos = 0;
+
+diag_final_buf_len = 512;
+diag_final_l = 9216;
+diag_final_r = 9728;
+diag_final_wrpos = 0;
 
 master_buf_len = 4096;
 master_buf_l = 10240;
@@ -112,17 +107,60 @@ master_startup_age = 0;
 
 function db2lin(db)
 (
-  exp(db * 0.11512925464970229);
+  exp(db * 0.1151292546497022842);
 );
 
 function lin2db(x)
 (
-  log(max(x, 0.0000001)) * 8.6858896380650366;
+  log(max(x, 0.0000001)) * 8.685889638065036553;
 );
 
 function clamp(x lo hi)
 (
   min(max(x, lo), hi);
+);
+
+function smoothstep01(x)
+(
+  x = clamp(x, 0, 1);
+  x * x * (3 - 2 * x);
+);
+
+function adaptive_bass_boost_curve(x) local(t y)
+(
+  x = clamp(x, 0, 1);
+  x <= 0.25 ? (
+    t = x;
+    y = -0.4571428571*t*t*t + 0.9142857143*t*t + 1.0000000000*t;
+  ) : x <= 0.50 ? (
+    t = x - 0.25;
+    y = -0.5468624845*t*t*t + 1.0510013351*t*t + 1.3714285714*t + 0.3000000000;
+  ) : x <= 0.65 ? (
+    t = x - 0.50;
+    y = -60.4153393502*t*t*t + 10.4330174081*t*t + 1.7943925234*t + 0.7000000000;
+  ) : (
+    t = x - 0.65;
+    y = -0.9672424138*t*t*t - 0.7011439362*t*t + 0.8462623413*t + 1.0000000000;
+  );
+  y;
+);
+
+function adaptive_bass_cut_curve(x) local(t y)
+(
+  x = clamp(x, 0, 1);
+  x <= 0.25 ? (
+    t = x;
+    y = -0.4571428571*t*t*t + 0.9142857143*t*t + 1.0000000000*t;
+  ) : x <= 0.50 ? (
+    t = x - 0.25;
+    y = -0.5468624845*t*t*t + 1.0510013351*t*t + 1.3714285714*t + 0.3000000000;
+  ) : x <= 0.65 ? (
+    t = x - 0.50;
+    y = -98.0269989616*t*t*t + 16.0747663551*t*t + 1.7943925234*t + 0.7000000000;
+  ) : (
+    y = 1;
+  );
+  clamp(y, 0, 1);
 );
 
 function absmax2(a b)
@@ -158,13 +196,6 @@ function allpass1(x c) instance(x1 y1) local(y)
   y;
 );
 
-function ap_coeff(freq) local(t)
-(
-  freq = clamp(freq, 5, srate * 0.45);
-  t = tan($pi * freq / srate);
-  (t - 1) / (t + 1);
-);
-
 function peak_env(det att rel) instance(e)
 (
   det > e ? e = det + att * (e - det) : e = det + rel * (e - det);
@@ -175,17 +206,6 @@ function peak_env_set(v) instance(e)
 (
   e = v;
   e;
-);
-
-function band_limit_gain(det thresh att rel) instance(env gain) local(tg)
-(
-  gain <= 0 ? gain = 1;
-  det > env ? env = det + att * (env - det) : env = det + rel * (env - det);
-  env = max(env, 0.000001);
-  tg = env > thresh ? thresh / env : 1;
-  tg = clamp(tg, 0.10, 1);
-  tg < gain ? gain = tg + att * (gain - tg) : gain = tg + rel * (gain - tg);
-  gain;
 );
 
 function band_limit_gain_pd(det thresh att rel_base rel_slow pd_amt) instance(env gain) local(tg depth rel_now)
@@ -213,6 +233,57 @@ function linked_limiter_gain(det thresh att rel) instance(gain) local(tg)
   tg = clamp(tg, 0.08, 1);
   tg < gain ? gain = tg + att * (gain - tg) : gain = tg + rel * (gain - tg);
   gain;
+);
+
+function band_event_gain_auto(det thresh_db quiet_thresh att rel_min rel_max) instance(env gain) local(inst_db rel_sec rel_now tg)
+(
+  gain <= 0 ? gain = 1;
+  env == 0 && det < quiet_thresh ? (
+    gain = 1;
+  ) : (
+    inst_db = lin2db(max(det, 0.000000000001)) - thresh_db;
+    inst_db < 0 ? inst_db = 0;
+    env == 0 && inst_db == 0 ? (
+      gain = 1;
+    ) : (
+      inst_db > env ? (
+        env = inst_db + att * (env - inst_db);
+      ) : (
+        rel_sec = min(0.060, max(0.004, env / 300.0));
+        rel_now = env < 1.2 ? rel_min : env > 18 ? rel_max : exp(-1 / max(1, srate_safe * rel_sec));
+        env = inst_db + rel_now * (env - inst_db);
+      );
+      env < 0.00001 ? env = 0;
+      env > 18.5 ? gain = 0.12 : (
+        tg = clamp(db2lin(-env), 0.12, 1);
+        gain = tg;
+      );
+    );
+  );
+  gain;
+);
+
+function lim_softclip_to_lim(x lim soft) local(ax sg knee span y)
+(
+  soft <= 0 ? (
+    ax = abs(x);
+    ax > lim ? sign(x) * lim : x;
+  ) : (
+    ax = abs(x);
+    sg = sign(x);
+    knee = lim * (1 - 0.70 * soft);
+    span = max(0.000000001, lim - knee);
+    ax <= knee ? x : (
+      y = knee + span * (1 - exp(-(ax - knee) / span));
+      sg * y;
+    );
+  );
+);
+
+function lim_band_clip(x lim amount soft) local(c)
+(
+  c = lim_softclip_to_lim(x, lim, soft);
+  x * (1 - amount) + c * amount;
 );
 
 function band_limit_gain_pd_soft(det thresh att rel_base rel_slow pd_amt ratio knee min_gain) instance(env gain) local(tg depth rel_now over soft)
@@ -254,23 +325,14 @@ function soft_clip_knee(x th knee_mul) local(ax sgn over knee y)
   );
 );
 
-function mb_soft_clip(x th amt knee_mul) local(c)
-(
-  c = soft_clip_knee(x, th, knee_mul);
-  x * (1 - amt) + c * amt;
-);
-
 function mb_soft_clip_dc(x th amt knee_mul cancel_amt a) instance(dc_z) local(c dist dist_low y)
 (
   c = soft_clip_knee(x, th, knee_mul);
-  cancel_amt > 0 ? (
-    dist = c - x;
-    dc_z += a * (dist - dc_z);
-    dist_low = dc_z;
-    y = c - dist_low * cancel_amt;
-  ) : (
-    y = c;
-  );
+  dist = c - x;
+
+  dc_z += a * (dist - dc_z);
+  dist_low = dc_z;
+  y = c - dist_low * cancel_amt;
   x * (1 - amt) + y * amt;
 );
 
@@ -320,6 +382,51 @@ function smooth_drive_rounder(x amt) instance(prev_sat) local(sat apply y)
   );
 );
 
+function adaptive_stereo_width_gain(mid_det side_det extra_request) instance(mid_fast mid_slow mid_env side_env gain) local(ratio transient side_gate level_gate narrowness character ratio_cap target_gain)
+(
+  mid_det > mid_fast ? (
+    mid_fast = mid_det + width_mid_fast_attack * (mid_fast - mid_det);
+  ) : (
+    mid_fast = mid_det + width_mid_fast_release * (mid_fast - mid_det);
+  );
+
+  mid_det > mid_slow ? (
+    mid_slow = mid_det + width_mid_slow_attack * (mid_slow - mid_det);
+  ) : (
+    mid_slow = mid_det + width_mid_slow_release * (mid_slow - mid_det);
+  );
+
+  mid_det > mid_env ? (
+    mid_env = mid_det + width_level_attack * (mid_env - mid_det);
+  ) : (
+    mid_env = mid_det + width_level_release * (mid_env - mid_det);
+  );
+
+  side_det > side_env ? (
+    side_env = side_det + width_level_attack * (side_env - side_det);
+  ) : (
+    side_env = side_det + width_level_release * (side_env - side_det);
+  );
+
+  ratio = side_env / max(mid_env, 0.000001);
+  transient = clamp((mid_fast / max(mid_slow, 0.000001) - 1) * 1.5, 0, 1);
+  side_gate = clamp((ratio - 0.012) * 20.8333333333333, 0, 1);
+  level_gate = clamp((mid_env - 0.001) * 111.111111111111, 0, 1);
+  narrowness = clamp((0.45 - ratio) * 2.85714285714286, 0, 1);
+  character = clamp(0.35 + 0.40 * transient + 0.25 * narrowness, 0, 1);
+  ratio_cap = ratio > 0.000001 ? clamp((0.92 / ratio - 1) / max(extra_request, 0.000001), 0, 1) : 1;
+  target_gain = side_gate * level_gate * character * ratio_cap;
+
+  target_gain < gain ? (
+    gain = target_gain + width_gain_reduce * (gain - target_gain);
+  ) : (
+    gain = target_gain + width_gain_restore * (gain - target_gain);
+  );
+
+  gain = min(gain, ratio_cap);
+  gain;
+);
+
 function hard_limit(x ceiling)
 (
   min(max(x, -ceiling), ceiling);
@@ -346,7 +453,6 @@ function reset_dynamic_state() local(i)
 
   agc_lgain = 1;
   agc_hgain = 1;
-  startup_activity = 0;
   gate_prog_env = 0;
   gate_state = 0;
   gate_closed_memory = 0;
@@ -364,10 +470,30 @@ function reset_dynamic_state() local(i)
   preclip.gain = 1;
   final_round_l.prev_sat = 0;
   final_round_r.prev_sat = 0;
+
+  pre_l.x1 = 0; pre_l.primed = 0;
+  pre_r.x1 = 0; pre_r.primed = 0;
+  deemph_l.x1 = 0; deemph_l.primed = 0;
+  deemph_r.x1 = 0; deemph_r.primed = 0;
+  adaptive_width.mid_fast = 0;
+  adaptive_width.mid_slow = 0;
+  adaptive_width.mid_env = 0;
+  adaptive_width.side_env = 0;
+  adaptive_width.gain = 0;
+
   post_agc_round_l.prev_sat = 0;
   post_agc_round_r.prev_sat = 0;
   post_xt2_round_l.prev_sat = 0;
   post_xt2_round_r.prev_sat = 0;
+  hp30_l.z = 0; hp30_r.z = 0;
+  agc_lp_l.z = 0; agc_lp_l.z1 = 0; agc_lp_l.z2 = 0;
+  agc_lp_r.z = 0; agc_lp_r.z1 = 0; agc_lp_r.z2 = 0;
+  xb1_l.z1=0; xb1_l.z2=0; xb2_l.z1=0; xb2_l.z2=0; xb3_l.z1=0; xb3_l.z2=0; xb4_l.z1=0; xb4_l.z2=0; xb5_l.z1=0; xb5_l.z2=0;
+  xb1_r.z1=0; xb1_r.z2=0; xb2_r.z1=0; xb2_r.z2=0; xb3_r.z1=0; xb3_r.z2=0; xb4_r.z1=0; xb4_r.z2=0; xb5_r.z1=0; xb5_r.z2=0;
+  adapt_top_air_hp_l.z=0; adapt_top_air_hp_r.z=0;
+  adapt_top_edge_env.e=0; adapt_top_edge_prog_env.e=0; adapt_top_air_env.e=0; adapt_top_air_prog_env.e=0;
+  adapt_top_presence_gain=1; adapt_top_air_gain=1;
+  dist_lpf_l.z=0; dist_lpf_r.z=0; fcs_res_l.z=0; fcs_res_r.z=0;
 
   reset_phase_state();
 
@@ -377,11 +503,87 @@ function reset_dynamic_state() local(i)
   lim4.env = 0; lim4.gain = 1;
   lim5.env = 0; lim5.gain = 1;
   lim6.env = 0; lim6.gain = 1;
+  mb_ev1.env = 0; mb_ev1.gain = 1;
+  mb_ev2.env = 0; mb_ev2.gain = 1;
+  mb_ev3.env = 0; mb_ev3.gain = 1;
+  mb_ev4.env = 0; mb_ev4.gain = 1;
+  mb_ev5.env = 0; mb_ev5.gain = 1;
+  mb_ev6.env = 0; mb_ev6.gain = 1;
+  shape_comp_rec1_db = 0; shape_comp_rec2_db = 0; shape_comp_rec3_db = 0;
+  shape_lim_rec1_db = 0; shape_lim_rec2_db = 0; shape_lim_rec3_db = 0;
 
-  adapt_bass_gain = 1;
-  adapt_bass_env.e = 0;
-  adapt_prog_env.e = 0;
-  adapt_bass_lp_l.z1 = 0; adapt_bass_lp_l.z2 = 0; adapt_bass_lp_r.z1 = 0; adapt_bass_lp_r.z2 = 0;
+  shape_rec_count = 0;
+  shape_rec_heavy_tick = 1;
+  comp_rec1_gain = comp_rec2_gain = comp_rec3_gain = 1;
+  lim_rec1_gain = lim_rec2_gain = lim_rec3_gain = 1;
+  shape_rec_comp_ratio1_blk = shape_rec_comp_ratio2_blk = shape_rec_comp_ratio3_blk = 1;
+  shape_rec_lim_ratio1_blk = shape_rec_lim_ratio2_blk = shape_rec_lim_ratio3_blk = 1;
+  shape_lvl1 = 0; shape_lvl2 = 0; shape_lvl3 = 0; shape_lvl4 = 0; shape_lvl5 = 0; shape_lvl6 = 0;
+  shape_servo1_db = 0; shape_servo2_db = 0; shape_servo3_db = 0;
+  shape_servo4_db = 0; shape_servo5_db = 0; shape_servo6_db = 0;
+
+  shape_servo_gain1 = shape_servo_gain2 = shape_servo_gain3 = 1;
+  shape_servo_gain4 = shape_servo_gain5 = shape_servo_gain6 = 1;
+  shape_power_accum1 = shape_power_accum2 = shape_power_accum3 = 0;
+  shape_power_accum4 = shape_power_accum5 = shape_power_accum6 = 0;
+  shape_block_counter = 0;
+
+  adaptive_cpu_count = 15;
+  adaptive_cpu_tick = 1;
+  at_presence_gain_target_cached = 1;
+  at_air_gain_target_cached = 1;
+
+  legacy_adapt_bass_lp_l.z1 = 0; legacy_adapt_bass_lp_l.z2 = 0;
+  legacy_adapt_bass_lp_r.z1 = 0; legacy_adapt_bass_lp_r.z2 = 0;
+  legacy_adapt_bass_env.e = 0; legacy_adapt_prog_env.e = 0;
+  legacy_adapt_bass_gain = 1;
+  adapt_bass_model_primed = 0;
+  adapt_bass_model_age_samples = 0;
+  adapt_bass_model_deep_env.e = 0;
+  adapt_bass_model_useful_env.e = 0;
+  adapt_bass_model_mid_env.e = 0;
+  adapt_bass_model_slow_deep_env.e = 0;
+  adapt_bass_model_slow_useful_env.e = 0;
+  adapt_bass_model_slow_mid_env.e = 0;
+  adapt_bass_model_fast_deep_boost_evidence_db = 0;
+  adapt_bass_model_fast_useful_boost_evidence_db = 0;
+  adapt_bass_model_fast_deep_cut_evidence_db = 0;
+  adapt_bass_model_fast_useful_cut_evidence_db = 0;
+  adapt_bass_model_deep_boost_state_db = 0;
+  adapt_bass_model_useful_boost_state_db = 0;
+  adapt_bass_model_deep_cut_state_db = 0;
+  adapt_bass_model_useful_cut_state_db = 0;
+  adapt_bass_model_70_l.x1 = 0; adapt_bass_model_70_l.x2 = 0; adapt_bass_model_70_l.y1 = 0; adapt_bass_model_70_l.y2 = 0;
+  adapt_bass_model_70_r.x1 = 0; adapt_bass_model_70_r.x2 = 0; adapt_bass_model_70_r.y1 = 0; adapt_bass_model_70_r.y2 = 0;
+  adapt_bass_model_250_l.x1 = 0; adapt_bass_model_250_l.x2 = 0; adapt_bass_model_250_l.y1 = 0; adapt_bass_model_250_l.y2 = 0;
+  adapt_bass_model_250_r.x1 = 0; adapt_bass_model_250_r.x2 = 0; adapt_bass_model_250_r.y1 = 0; adapt_bass_model_250_r.y2 = 0;
+  adapt_bass_model_420_l.x1 = 0; adapt_bass_model_420_l.x2 = 0; adapt_bass_model_420_l.y1 = 0; adapt_bass_model_420_l.y2 = 0;
+  adapt_bass_model_420_r.x1 = 0; adapt_bass_model_420_r.x2 = 0; adapt_bass_model_420_r.y1 = 0; adapt_bass_model_420_r.y2 = 0;
+  adapt_bass_model_3700_l.x1 = 0; adapt_bass_model_3700_l.x2 = 0; adapt_bass_model_3700_l.y1 = 0; adapt_bass_model_3700_l.y2 = 0;
+  adapt_bass_model_3700_r.x1 = 0; adapt_bass_model_3700_r.x2 = 0; adapt_bass_model_3700_r.y1 = 0; adapt_bass_model_3700_r.y2 = 0;
+  adapt_bass_actuator_shelf_l.x1 = 0; adapt_bass_actuator_shelf_l.x2 = 0; adapt_bass_actuator_shelf_l.y1 = 0; adapt_bass_actuator_shelf_l.y2 = 0;
+  adapt_bass_actuator_shelf_r.x1 = 0; adapt_bass_actuator_shelf_r.x2 = 0; adapt_bass_actuator_shelf_r.y1 = 0; adapt_bass_actuator_shelf_r.y2 = 0;
+  adapt_bass_actuator_body_l.x1 = 0; adapt_bass_actuator_body_l.x2 = 0; adapt_bass_actuator_body_l.y1 = 0; adapt_bass_actuator_body_l.y2 = 0;
+  adapt_bass_actuator_body_r.x1 = 0; adapt_bass_actuator_body_r.x2 = 0; adapt_bass_actuator_body_r.y1 = 0; adapt_bass_actuator_body_r.y2 = 0;
+  adapt_bass_actuator_shelf_l.a0 = 1; adapt_bass_actuator_shelf_l.a1 = 0; adapt_bass_actuator_shelf_l.a2 = 0; adapt_bass_actuator_shelf_l.b1 = 0; adapt_bass_actuator_shelf_l.b2 = 0;
+  adapt_bass_actuator_shelf_r.a0 = 1; adapt_bass_actuator_shelf_r.a1 = 0; adapt_bass_actuator_shelf_r.a2 = 0; adapt_bass_actuator_shelf_r.b1 = 0; adapt_bass_actuator_shelf_r.b2 = 0;
+  adapt_bass_actuator_body_l.a0 = 1; adapt_bass_actuator_body_l.a1 = 0; adapt_bass_actuator_body_l.a2 = 0; adapt_bass_actuator_body_l.b1 = 0; adapt_bass_actuator_body_l.b2 = 0;
+  adapt_bass_actuator_body_r.a0 = 1; adapt_bass_actuator_body_r.a1 = 0; adapt_bass_actuator_body_r.a2 = 0; adapt_bass_actuator_body_r.b1 = 0; adapt_bass_actuator_body_r.b2 = 0;
+  adapt_bass_actuator_coeff_count = 63;
+  adapt_bass_model_deep_gain = 1;
+  adapt_bass_model_useful_gain = 1;
+  adapt_bass_model_deep_target_cached = 1;
+  adapt_bass_model_useful_target_cached = 1;
+  adapt_bass_model_deep_target_db_cached = 0;
+  adapt_bass_model_useful_target_db_cached = 0;
+  adapt_bass_model_voice_gain = 1;
+  adapt_bass_model_voice_target_cached = 1;
+  adapt_bass_model_deep_ratio_db = 0;
+  adapt_bass_model_useful_ratio_db = 0;
+  adapt_bass_model_deep_raw_db = 0;
+  adapt_bass_model_useful_raw_db = 0;
+  bass_peak_l.x1 = 0; bass_peak_l.x2 = 0; bass_peak_l.y1 = 0; bass_peak_l.y2 = 0;
+  bass_peak_r.x1 = 0; bass_peak_r.x2 = 0; bass_peak_r.y1 = 0; bass_peak_r.y2 = 0;
 
   bassclip_pre_l.z1 = 0; bassclip_pre_l.z2 = 0; bassclip_pre_r.z1 = 0; bassclip_pre_r.z2 = 0;
   bassclip_split_l.z1 = 0; bassclip_split_l.z2 = 0; bassclip_split_r.z1 = 0; bassclip_split_r.z2 = 0;
@@ -397,6 +599,8 @@ function reset_dynamic_state() local(i)
 
   fcs_wrpos = 0;
   snub_wrpos = 0;
+  diag_xt2_wrpos = 0;
+  diag_final_wrpos = 0;
   master_wrpos = 0;
   master_startup_armed = 1;
   master_startup_age = 0;
@@ -418,6 +622,16 @@ function reset_dynamic_state() local(i)
     i += 1;
   );
   i = 0;
+  loop(diag_xt2_buf_len,
+    diag_xt2_l[i] = 0; diag_xt2_r[i] = 0;
+    i += 1;
+  );
+  i = 0;
+  loop(diag_final_buf_len,
+    diag_final_l[i] = 0; diag_final_r[i] = 0;
+    i += 1;
+  );
+  i = 0;
   loop(master_buf_len,
     master_buf_l[i] = 0; master_buf_r[i] = 0;
     i += 1;
@@ -426,8 +640,8 @@ function reset_dynamic_state() local(i)
 
 function biquad_lp_set(freq q) instance(a0 a1 a2 b1 b2) local(w0 cw sw alpha norm)
 (
-  freq = clamp(freq, 20, srate * 0.45);
-  w0 = 2*$pi*freq/srate;
+  freq = clamp(freq, 20, srate_safe * 0.45);
+  w0 = 2*$pi*freq/srate_safe;
   cw = cos(w0);
   sw = sin(w0);
   alpha = sw/(2*q);
@@ -441,9 +655,9 @@ function biquad_lp_set(freq q) instance(a0 a1 a2 b1 b2) local(w0 cw sw alpha nor
 
 function biquad_peak_set(freq q gain_db) instance(a0 a1 a2 b1 b2) local(A w0 cw sw alpha b0 bb1 bb2 aa0 aa1 aa2 norm)
 (
-  freq = clamp(freq, 20, srate * 0.45);
-  A = exp(gain_db * 0.057564627324851);
-  w0 = 2*$pi*freq/srate;
+  freq = clamp(freq, 20, srate_safe * 0.45);
+  A = 10^(gain_db/40);
+  w0 = 2*$pi*freq/srate_safe;
   cw = cos(w0);
   sw = sin(w0);
   alpha = sw/(2*q);
@@ -453,6 +667,30 @@ function biquad_peak_set(freq q gain_db) instance(a0 a1 a2 b1 b2) local(A w0 cw 
   aa0 = 1 + alpha/A;
   aa1 = -2*cw;
   aa2 = 1 - alpha/A;
+  norm = 1/aa0;
+  a0 = b0*norm;
+  a1 = bb1*norm;
+  a2 = bb2*norm;
+  b1 = aa1*norm;
+  b2 = aa2*norm;
+);
+
+function biquad_low_shelf_set(freq slope gain_db) instance(a0 a1 a2 b1 b2) local(A w0 cw sw alpha sqrtA b0 bb1 bb2 aa0 aa1 aa2 norm)
+(
+  freq = clamp(freq, 20, srate_safe * 0.45);
+  slope = clamp(slope, 0.20, 2.00);
+  A = 10^(gain_db/40);
+  w0 = 2*$pi*freq/srate_safe;
+  cw = cos(w0);
+  sw = sin(w0);
+  alpha = (sw * 0.5) * sqrt((A + 1/A) * (1/slope - 1) + 2);
+  sqrtA = sqrt(A);
+  b0 = A * ((A + 1) - (A - 1)*cw + 2*sqrtA*alpha);
+  bb1 = 2*A * ((A - 1) - (A + 1)*cw);
+  bb2 = A * ((A + 1) - (A - 1)*cw - 2*sqrtA*alpha);
+  aa0 = (A + 1) + (A - 1)*cw + 2*sqrtA*alpha;
+  aa1 = -2 * ((A - 1) + (A + 1)*cw);
+  aa2 = (A + 1) + (A - 1)*cw - 2*sqrtA*alpha;
   norm = 1/aa0;
   a0 = b0*norm;
   a1 = bb1*norm;
@@ -471,66 +709,847 @@ function biquad_run(x) instance(a0 a1 a2 b1 b2 x1 x2 y1 y2) local(y)
   y;
 );
 
+function fm_emph(x k) instance(x1 primed) local(y)
+(
+  primed <= 0 ? (
+    x1 = x;
+    primed = 1;
+    y = x;
+  ) : (
+    y = x + k * (x - x1);
+    x1 = x;
+  );
+  y;
+);
+
+function fm_deemph(y k) instance(x1 primed) local(x)
+(
+  primed <= 0 ? (
+    x1 = y;
+    primed = 1;
+    x = y;
+  ) : (
+    x = (y + k * x1) / max(1 + k, 0.000000001);
+    x1 = x;
+  );
+  x;
+);
+
+function meter_to_db(x)
+(
+  x > 0.000001 ? lin2db(x) : -120;
+);
+
+function meter_over_db(x ref)
+(
+  x > ref ? lin2db(x / max(ref, 0.000001)) : 0;
+);
+
+function meter_note_activity(stage activity_db)
+(
+  activity_db > meter_last_activity_db ? (
+    meter_last_activity_db = activity_db;
+    meter_last_stage_internal = stage;
+    meter_stage_name = stage;
+  );
+);
+
+function reset_meter_state()
+(
+  meter_out_peak_l = 0;
+  meter_out_peak_r = 0;
+  meter_out_mid_peak = 0;
+  meter_out_side_peak = 0;
+  meter_final_in_mid_peak = 0;
+  meter_final_in_side_peak = 0;
+  meter_mb_clip_max_db = 0;
+  meter_preclip_max_db = 0;
+  meter_final_clip_max_db = 0;
+  meter_width_added_max_db = 0;
+  meter_over_ceiling_max_db = 0;
+  meter_gain_reduction1_max = 0;
+  meter_gain_reduction2_max = 0;
+  meter_gain_reduction3_max = 0;
+  meter_gain_reduction4_max = 0;
+  meter_gain_reduction5_max = 0;
+  meter_gain_reduction6_max = 0;
+  meter_band1_gain_reduction_value = 0;
+  meter_band2_gain_reduction_value = 0;
+  meter_band3_gain_reduction_value = 0;
+  meter_band4_gain_reduction_value = 0;
+  meter_band5_gain_reduction_value = 0;
+  meter_band6_gain_reduction_value = 0;
+  meter_last_activity_db = 0;
+  meter_last_stage_internal = 0;
+  meter_stage_name = 0;
+  meter_selected_value = -120;
+  meter_refresh_count = 0;
+
+  meter_cpu_count = 0;
+  meter_heavy_tick = 1;
+  meter_blk_mb_pre3 = meter_blk_mb_pre4 = meter_blk_mb_pre5 = meter_blk_mb_pre6 = 0;
+  meter_blk_mb_post3 = meter_blk_mb_post4 = meter_blk_mb_post5 = meter_blk_mb_post6 = 0;
+  meter_blk_gr_min1 = meter_blk_gr_min2 = meter_blk_gr_min3 = 1;
+  meter_blk_gr_min4 = meter_blk_gr_min5 = meter_blk_gr_min6 = 1;
+  meter_blk_us_pre4 = meter_blk_us_pre5 = meter_blk_us_pre6 = 0;
+  meter_blk_us_post4 = meter_blk_us_post5 = meter_blk_us_post6 = 0;
+  meter_blk_recomb_pre = meter_blk_recomb_post = 0;
+  meter_blk_guard_min = 1;
+  meter_blk_width_added_max = 1;
+  meter_blk_preclip_min = 1;
+  meter_blk_finalclip_pre = meter_blk_finalclip_post = 0;
+  meter_blk_overshoot_peak = 0;
+  meter_blk_safety_peak = 0;
+  meter_blk_safety_pre = meter_blk_safety_post = 0;
+);
+
+function refresh_meter_readout() local(old_selected_value old_stage_name)
+(
+  old_selected_value = meter_selected_value;
+  old_stage_name = meter_stage_name;
+
+  meter_view = floor(clamp(meter_view, 0, 16) + 0.5);
+  meter_stage_name = meter_last_stage_internal;
+  meter_selected_value = meter_view == 0 ? meter_to_db(meter_out_peak_l) :
+                         meter_view == 1 ? meter_to_db(meter_out_peak_r) :
+                         meter_view == 2 ? meter_to_db(meter_out_mid_peak) :
+                         meter_view == 3 ? meter_to_db(meter_out_side_peak) :
+                         meter_view == 4 ? meter_to_db(meter_final_in_mid_peak) :
+                         meter_view == 5 ? meter_to_db(meter_final_in_side_peak) :
+                         meter_view == 6 ? meter_mb_clip_max_db :
+                         meter_view == 7 ? meter_preclip_max_db :
+                         meter_view == 8 ? meter_final_clip_max_db :
+                         meter_view == 9 ? meter_over_ceiling_max_db :
+                         meter_view == 10 ? meter_gain_reduction1_max :
+                         meter_view == 11 ? meter_gain_reduction2_max :
+                         meter_view == 12 ? meter_gain_reduction3_max :
+                         meter_view == 13 ? meter_gain_reduction4_max :
+                         meter_view == 14 ? meter_gain_reduction5_max :
+                         meter_view == 15 ? meter_gain_reduction6_max :
+                                              meter_width_added_max_db;
+
+);
+
+function update_derived_params() local(dpos dneg)
+(
+  shape_rec_block_size = 16;
+  shape_rec_attack = 1 - exp(-1/(srate_safe * 0.320));
+  shape_rec_release = 1 - exp(-1/(srate_safe * 0.070));
+  shape_rec_attack_blk = 1 - pow(1 - shape_rec_attack, shape_rec_block_size);
+  shape_rec_release_blk = 1 - pow(1 - shape_rec_release, shape_rec_block_size);
+  shape_servo_lvl_a = 1 - exp(-1/(srate_safe * 2.400));
+  shape_servo_gain_a = 1 - exp(-1/(srate_safe * 0.900));
+
+  crossover_model = floor(clamp(crossover_model, 0, 3) + 0.5);
+  processor_mode = floor(clamp(processor_mode, 0, 1) + 0.5);
+  subsonic_hpf = floor(clamp(subsonic_hpf, 0, 1) + 0.5);
+  top_filter_mode = floor(clamp(top_filter_mode, 0, 3) + 0.5);
+  xt2_amount_pct = clamp(xt2_amount_pct, 0, 100);
+  mb_limiter_depth_pct = clamp(mb_limiter_depth_pct, 0, 100);
+  mb_limiter_depth_user = mb_limiter_depth_pct * 0.01;
+  mb_shape_pct = clamp(mb_shape_pct, 0, 100);
+  mb_comp_limiter_pct = clamp(mb_comp_limiter_pct, 0, 100);
+  upper_snubber = upper_snubber_pct * 0.01;
+  overshoot_amt = overshoot_pct * 0.01;
+
+  snubber_lookahead_ms > 1.50 ? snubber_lookahead_ms = min(snubber_lookahead_ms, 64) * 1000 / 44100;
+  lookahead_ms > 1.50 ? lookahead_ms = min(lookahead_ms, 64) * 1000 / 44100;
+  snubber_lookahead_ms = clamp(snubber_lookahead_ms, 0, 1.50);
+  lookahead_ms = clamp(lookahead_ms, 0, 1.50);
+
+  ceiling = db2lin(clip_ceiling_db);
+  clip_ref = ceiling * 0.985;
+  mb_ref = ceiling * 0.985;
+
+  effective_snubber_lookahead = (xt2_section_mode != 3 && upper_snubber > 0 && snubber_lookahead_ms > 0) ? min(snub_buf_len - 1, floor(srate_safe * snubber_lookahead_ms * 0.001 + 0.5)) : 0;
+  effective_final_lookahead = (final_section_mode != 3 && overshoot_amt > 0 && lookahead_ms > 0) ? min(fcs_buf_len - 1, floor(srate_safe * lookahead_ms * 0.001 + 0.5)) : 0;
+  mastering_lookahead_samps = processor_mode == 1 ? min(master_buf_len - 1, floor(srate_safe * 0.010 + 0.5)) : 0;
+  master_startup_prime_window = floor(srate_safe * 0.350 + 0.5);
+  master_startup_active_thresh = db2lin(-70);
+
+  diag_stage = -1;
+  input_section_mode == 1 || input_section_mode == 2 ? diag_stage = 0;
+  agc_section_mode == 1 || agc_section_mode == 2 ? diag_stage = 1;
+  bass_section_mode == 1 || bass_section_mode == 2 ? diag_stage = 2;
+  xt2_section_mode == 1 || xt2_section_mode == 2 ? diag_stage = 3;
+  stereo_section_mode == 1 || stereo_section_mode == 2 ? diag_stage = 4;
+  final_section_mode == 1 || final_section_mode == 2 ? diag_stage = 5;
+
+  diag_stage >= 0 ? (
+    path_delay = 0;
+    diag_stage >= 2 ? path_delay += mastering_lookahead_samps;
+    diag_stage >= 3 ? path_delay += effective_snubber_lookahead;
+    diag_stage >= 5 ? path_delay += effective_final_lookahead;
+  ) : (
+    path_delay = mastering_lookahead_samps + effective_snubber_lookahead;
+    final_section_mode != 3 ? path_delay += effective_final_lookahead;
+  );
+  pdc_delay = path_delay + hybrid_total_spl;
+  pdc_bot_ch = 0;
+  pdc_top_ch = 2;
+
+  phase_legacy_val = phase_rotate_pct;
+  phase_legacy_val > 6 ? (
+    phase_rotate_pct = 6;
+    phase_legacy_val < 85 ? phase_rotate_pct = 5;
+    phase_legacy_val < 70 ? phase_rotate_pct = 4;
+    phase_legacy_val < 58 ? phase_rotate_pct = 3;
+    phase_legacy_val < 42 ? phase_rotate_pct = 2;
+    phase_legacy_val < 20 ? phase_rotate_pct = 1;
+  );
+  phase_mode = floor(clamp(phase_rotate_pct, 0, 6) + 0.5);
+  phase_rotate_pct = phase_mode;
+  phase_mode != phase_mode_last ? (
+    reset_phase_state();
+    phase_mode_last = phase_mode;
+  );
+  phase_stages = 0;
+  phase_mode == 1 ? phase_stages = 2;
+  phase_mode == 2 ? phase_stages = 4;
+  phase_mode == 3 ? phase_stages = 6;
+  phase_mode == 4 ? phase_stages = 8;
+  phase_mode == 5 ? phase_stages = 10;
+  phase_mode == 6 ? phase_stages = 12;
+
+  phase_f1 = 55;
+  phase_f2 = 85;
+  phase_f3 = 130;
+  phase_f4 = 200;
+  phase_f5 = 310;
+  phase_f6 = 480;
+  phase_f7 = 740;
+  phase_f8 = 1150;
+  phase_f9 = 1800;
+  phase_f10 = 2800;
+  phase_f11 = 4300;
+  phase_f12 = 6500;
+
+  input_gain = db2lin(input_trim_db);
+  agc_drive = db2lin(agc_drive_db);
+  density_pos_db = max(density_db, 0);
+  density_neg_db = min(density_db, 0);
+  density_audio_gain = db2lin(density_neg_db + density_pos_db * 0.35);
+  density_detector_gain = db2lin(density_pos_db * 0.65);
+  density_clip_drive = db2lin(density_pos_db * 0.55);
+  presence_gain = db2lin(presence_db);
+  brilliance_gain = db2lin(brilliance_db);
+  clip_drive_mb = db2lin(clip_drive_db * 0.60);
+
+  density_protection_drive_gain = db2lin(max(clip_drive_db, 0) * 0.75);
+  mb_work_ref = mb_ref / max(clip_drive_mb * density_clip_drive, 0.25);
+  final_threshold_db = clamp(final_threshold_db, -24, 6);
+  final_threshold_makeup_pct = clamp(final_threshold_makeup_pct, 0, 100);
+  final_threshold_drive_target = db2lin(-final_threshold_db);
+  final_threshold_makeup = final_threshold_makeup_pct * 0.01;
+  output_gain = db2lin(output_trim_db);
+  smooth_drive_rounder_amt = clamp(smooth_drive_rounder_pct, 0, 100) * 0.01;
+  post_agc_smooth_drive_amt = clamp(post_agc_smooth_drive_pct, 0, 25) * 0.01;
+  post_xt2_smooth_drive_amt = clamp(post_xt2_smooth_drive_pct, 0, 50) * 0.01;
+  post_agc_smooth_recovery_gain = db2lin(2.0 * clamp(post_agc_smooth_drive_pct, 0, 25) / 25.0);
+  post_xt2_smooth_recovery_gain = db2lin(2.0 * clamp(post_xt2_smooth_drive_pct, 0, 50) / 50.0);
+  density_output_gain = db2lin(clamp(density_output_db, -12, 12));
+
+  mb_clip_mix = mb_clip_pct * 0.01;
+  dc_cancel = dc_cancel_pct * 0.01;
+  recomb_control = recomb_control_pct * 0.01;
+
+  agc_mix = agc_amount_pct * 0.01;
+  agc_down_mix = agc_mix <= 0.50 ? agc_mix : 0.50 + (agc_mix - 0.50) * 0.40;
+  pd_release = pd_release_pct * 0.01;
+  gate_reopen_strength = gate_reopen_strength_pct * 0.01;
+  gate_reopen_speed_sec = max(gate_reopen_speed_ms * 0.001, 0.005);
+  gate_lin = db2lin(gate_threshold_db);
+  agc_target = db2lin(-17);
+  agc_max_gain = db2lin(agc_max_gain_db);
+  agc_min_gain = db2lin(-14);
+
+  xt2_mix = xt2_amount_pct * 0.01;
+  adaptive_top_coupling = (xt2_section_mode != 3) ? adaptive_top_coupling_pct * 0.01 : 0;
+  bass_section_active = bass_section_mode != 3;
+  bass_coupling = bass_section_active ? bass_coupling_pct * 0.01 : 0;
+  bass_eq_work_db = bass_section_active ? bass_eq_db : 0;
+  bass_sc_relief = bass_section_active ? bass_sc_relief_pct * 0.01 : 0;
+  low_coherence = bass_section_active ? low_coherence_pct * 0.01 : 0;
+  low_release_stab = bass_section_active ? low_release_stab_pct * 0.01 : 0;
+  transition_fill = bass_section_active ? transition_fill_pct * 0.01 : 0;
+  low_bass_floor = bass_section_active ? low_bass_floor_pct * 0.01 : 0;
+  adaptive_bass_coupling = bass_section_active ? adaptive_bass_coupling_pct * 0.01 : 0;
+  bass_clip = bass_section_active ? bass_clip_pct * 0.01 : 0;
+  bass_clip_density = bass_section_active ? bass_clip_density_pct * 0.01 : 0;
+
+  prelimit_mix = pre_limiter_pct * 0.01;
+  clip_restraint = clip_restraint_pct * 0.01;
+
+  clipper_style_work = floor(clamp(clipper_style, 0, 7) + 0.5);
+  clipper_ms_mode = clipper_style_work >= 4;
+  clipper_style_base = clipper_ms_mode ? clipper_style_work - 4 : clipper_style_work;
+  peak_only_final_limiter = (clipper_style_base == 0 && clipper_ms_mode <= 0 && pre_limiter_pct >= 99 && clip_restraint_pct >= 99 && smooth_drive_rounder_pct <= 0.001 && post_agc_smooth_drive_pct <= 0.001 && post_xt2_smooth_drive_pct <= 0.001 && abs(density_output_db) <= 0.001 && top_filter_mode == 0 && fm_preemph_mode == 0 && final_threshold_db >= -0.001 && final_threshold_db <= 0.001);
+  prelimit_thresh = peak_only_final_limiter ? ceiling : ceiling * 0.985;
+  fcs_thresh_setting = peak_only_final_limiter ? ceiling : ceiling * 0.985;
+
+  agc_env_attack = exp(-1/(srate_safe * 0.045));
+  agc_gain_attack = exp(-1/(srate_safe * 0.030));
+  band_attack = exp(-1/(srate_safe * 0.0012));
+  upper_band_attack = exp(-1/(srate_safe * 0.0024));
+  upper_mid_band_attack = exp(-1/(srate_safe * 0.0018));
+  agc_release = exp(-1/(srate_safe * (0.080 + release_time * 0.085)));
+  agc_release_slow = exp(-1/(srate_safe * (0.240 + release_time * 0.150)));
+  band_release = exp(-1/(srate_safe * (0.035 + release_time * 0.035)));
+  band_release_slow = exp(-1/(srate_safe * (0.100 + release_time * 0.080)));
+  low_band_release_base = exp(-1/(srate_safe * (0.060 + release_time * 0.055)));
+  low_band_release_slow2 = exp(-1/(srate_safe * (0.180 + release_time * 0.100)));
+  low_band_release = band_release * (1 - low_release_stab) + low_band_release_base * low_release_stab;
+  low_band_release_slow = band_release_slow * (1 - low_release_stab) + low_band_release_slow2 * low_release_stab;
+  mb_event_attack = exp(-1/(srate_safe * 0.0040));
+  mb_event_release_fast = exp(-1/max(1, srate_safe * 0.004));
+  mb_event_release_slow = exp(-1/max(1, srate_safe * 0.060));
+  clip_attack = exp(-1/(srate_safe * 0.0008));
+  clip_release = exp(-1/(srate_safe * 0.045));
+  final_threshold_smooth = exp(-1/(srate_safe * 0.010));
+  recomb_attack = exp(-1/(srate_safe * 0.0007));
+
+  master_catch_attack = exp(-1/(srate_safe * 0.010));
+  master_catch_release = exp(-1/(srate_safe * 0.150));
+  master_env_attack = exp(-1/(srate_safe * 0.006));
+  master_env_release = exp(-1/(srate_safe * 0.320));
+
+  gate_detector_release = exp(-1/(srate_safe * 0.160));
+  gate_close_sec = 0.040 + release_time * 0.012;
+  gate_close_coeff = exp(-1/(srate_safe * gate_close_sec));
+  gate_open_coeff = exp(-1/(srate_safe * 0.0015));
+  gate_agc_freeze_release = exp(-1/(srate_safe * 8.0));
+  gate_xt2_freeze_release = exp(-1/(srate_safe * 2.5));
+  gate_reopen_release = exp(-1/(srate_safe * gate_reopen_speed_sec));
+  gate_reopen_env_release = exp(-1/(srate_safe * max(gate_reopen_speed_sec * 0.85, 0.005)));
+  gate_reopen_decay = exp(-1/(srate_safe * max(gate_reopen_speed_sec * 4.5, 0.120)));
+  gate_reopen_pulse_scale = 0.20 + 0.95 * gate_reopen_strength;
+
+  gate_agc_drift_target = db2lin(-10);
+  gate_agc_drift_coeff = exp(-1/(srate_safe * 4.5));
+
+  upper_snub_fast_a = 1 - exp(-1/(srate_safe * 0.00055));
+  upper_snub_slow_a = 1 - exp(-1/(srate_safe * 0.018));
+  upper_snub_delta_a = 1 - exp(-1/(srate_safe * 0.0030));
+  upper_snub_curve_a = 1 - exp(-1/(srate_safe * 0.0022));
+  upper_snub_gain_attack = exp(-1/(srate_safe * 0.00010));
+  upper_snub_gain_release = exp(-1/(srate_safe * 0.0028));
+
+  hpf30_a = 1 - exp(-2*$pi*(core_mode == 1 ? 42.5 : 20)/srate_safe);
+  agc_split_a = 1 - exp(-2*$pi*200/srate_safe);
+
+  x1_a = 1 - exp(-2*$pi*150/srate_safe);
+  x2_a = 1 - exp(-2*$pi*420/srate_safe);
+  x3_a = 1 - exp(-2*$pi*700/srate_safe);
+  x4_a = 1 - exp(-2*$pi*1600/srate_safe);
+  x5_a = 1 - exp(-2*$pi*3700/srate_safe);
+
+  lr4b1a_l.biquad_lp_set(150, 0.7071);  lr4b1a_r.biquad_lp_set(150, 0.7071);
+  lr4b1b_l.biquad_lp_set(150, 0.7071);  lr4b1b_r.biquad_lp_set(150, 0.7071);
+  lr4b2a_l.biquad_lp_set(420, 0.7071);  lr4b2a_r.biquad_lp_set(420, 0.7071);
+  lr4b2b_l.biquad_lp_set(420, 0.7071);  lr4b2b_r.biquad_lp_set(420, 0.7071);
+  lr4b3a_l.biquad_lp_set(700, 0.7071);  lr4b3a_r.biquad_lp_set(700, 0.7071);
+  lr4b3b_l.biquad_lp_set(700, 0.7071);  lr4b3b_r.biquad_lp_set(700, 0.7071);
+  lr4b4a_l.biquad_lp_set(1600, 0.7071); lr4b4a_r.biquad_lp_set(1600, 0.7071);
+  lr4b4b_l.biquad_lp_set(1600, 0.7071); lr4b4b_r.biquad_lp_set(1600, 0.7071);
+  lr4b5a_l.biquad_lp_set(3700, 0.7071); lr4b5a_r.biquad_lp_set(3700, 0.7071);
+  lr4b5b_l.biquad_lp_set(3700, 0.7071); lr4b5b_r.biquad_lp_set(3700, 0.7071);
+
+  dist_cancel_a = 1 - exp(-2*$pi*2200/srate_safe);
+
+  ap1_t = tan($pi * phase_f1 / srate_safe); ap1_c = (ap1_t - 1) / (ap1_t + 1);
+  ap2_t = tan($pi * phase_f2 / srate_safe); ap2_c = (ap2_t - 1) / (ap2_t + 1);
+  ap3_t = tan($pi * phase_f3 / srate_safe); ap3_c = (ap3_t - 1) / (ap3_t + 1);
+  ap4_t = tan($pi * phase_f4 / srate_safe); ap4_c = (ap4_t - 1) / (ap4_t + 1);
+  ap5_t = tan($pi * phase_f5 / srate_safe); ap5_c = (ap5_t - 1) / (ap5_t + 1);
+  ap6_t = tan($pi * phase_f6 / srate_safe); ap6_c = (ap6_t - 1) / (ap6_t + 1);
+  ap7_t = tan($pi * phase_f7 / srate_safe); ap7_c = (ap7_t - 1) / (ap7_t + 1);
+  ap8_t = tan($pi * phase_f8 / srate_safe); ap8_c = (ap8_t - 1) / (ap8_t + 1);
+  ap9_t = tan($pi * phase_f9 / srate_safe); ap9_c = (ap9_t - 1) / (ap9_t + 1);
+  ap10_t = tan($pi * phase_f10 / srate_safe); ap10_c = (ap10_t - 1) / (ap10_t + 1);
+  ap11_t = tan($pi * phase_f11 / srate_safe); ap11_c = (ap11_t - 1) / (ap11_t + 1);
+  ap12_t = tan($pi * phase_f12 / srate_safe); ap12_c = (ap12_t - 1) / (ap12_t + 1);
+
+  mb_shape = clamp(mb_shape_pct, 0, 100) * 0.01;
+  shape_hi_amt = max(0, (mb_shape - 0.35) / 0.65);
+  shape_hi_amt *= shape_hi_amt;
+
+  mb_comp_limiter_raw = clamp(mb_comp_limiter_pct, 0, 100) * 0.01;
+  mb_comp_limiter = mb_comp_limiter_raw * (0.85 + 0.15 * mb_comp_limiter_raw);
+  mb_comp_keep = 1 - mb_comp_limiter;
+  producer_density_active = core_mode == 1 && (mb_comp_limiter_pct > 0.000001 || mb_shape_pct > 0.000001);
+
+  lim_depth_user = clamp(mb_limiter_depth_pct * 0.01, 0, 1);
+  lim_depth_norm = 0.75 * sqrt(lim_depth_user);
+  lim_depth_drop_db = 8.0 * lim_depth_norm * lim_depth_norm;
+  lim_flat_db = -8.0 - 16.0 * lim_depth_norm * lim_depth_norm;
+
+  base_b1_thresh_db = -9.5;
+  base_b2_thresh_db = -11.5;
+  base_b3_thresh_db = -13.0;
+  base_b4_thresh_db = -14.5;
+  base_b5_thresh_db = -16.5;
+  base_b6_thresh_db = -18.0;
+
+  lim_nat1_db = base_b1_thresh_db - lim_depth_drop_db;
+  lim_nat2_db = base_b2_thresh_db - lim_depth_drop_db;
+  lim_nat3_db = base_b3_thresh_db - lim_depth_drop_db;
+  lim_nat4_db = base_b4_thresh_db - lim_depth_drop_db;
+  lim_nat5_db = base_b5_thresh_db - lim_depth_drop_db;
+  lim_nat6_db = base_b6_thresh_db - lim_depth_drop_db;
+
+  lim_work1_db = lim_nat1_db + (lim_flat_db - lim_nat1_db) * mb_shape;
+  lim_work2_db = lim_nat2_db + (lim_flat_db - lim_nat2_db) * mb_shape;
+  lim_work3_db = lim_nat3_db + (lim_flat_db - lim_nat3_db) * mb_shape;
+  lim_ctrl4_db = lim_nat4_db + (lim_flat_db - lim_nat4_db) * (shape_hi_amt * 0.34);
+  lim_ctrl5_db = base_b5_thresh_db - lim_depth_drop_db * 0.18;
+  lim_ctrl6_db = base_b6_thresh_db - lim_depth_drop_db * 0.18;
+  lim_work4_db = lim_nat4_db + (lim_ctrl4_db - lim_nat4_db) * shape_hi_amt;
+  lim_work5_db = lim_nat5_db + (lim_ctrl5_db - lim_nat5_db) * shape_hi_amt;
+  lim_work6_db = lim_nat6_db + (lim_ctrl6_db - lim_nat6_db) * shape_hi_amt;
+
+  lim_work1 = db2lin(lim_work1_db);
+  lim_work2 = db2lin(lim_work2_db);
+  lim_work3 = db2lin(lim_work3_db);
+  lim_work4 = db2lin(lim_work4_db);
+  lim_work5 = db2lin(lim_work5_db);
+  lim_work6 = db2lin(lim_work6_db);
+
+  mb_presence_post_coeff = 0.42 - 0.16 * shape_hi_amt;
+  mb_brilliance_post_coeff = 0.38 - 0.14 * shape_hi_amt;
+  mb_presence_post = db2lin(presence_db * mb_presence_post_coeff);
+  mb_brilliance_post = db2lin(brilliance_db * mb_brilliance_post_coeff);
+
+  const_db2lin_minus28 = db2lin(-28);
+  const_db2lin_minus18 = db2lin(-18);
+  const_db2lin_minus6 = db2lin(-6);
+  const_db2lin_minus6_2 = db2lin(-6.2);
+  const_db2lin_minus3_6 = db2lin(-3.6);
+
+  b1_det_db2lin = db2lin(-bass_eq_work_db * 0.55 * bass_sc_relief - 1.00 * low_bass_floor);
+  b2_det_db2lin = db2lin(-bass_eq_work_db * 0.35 * bass_sc_relief - 0.45 * low_bass_floor);
+
+  mb_comp_fork_cal_gain = 1;
+  mb_limiter_fork_cal_gain = db2lin(-1.5 - 1.5 * mb_shape);
+  mb_limiter_handoff_cal_gain = 1;
+
+  density_flat_db = -14.2;
+  density_shape_amt = mb_shape * 0.55;
+  b1_thresh_db = base_b1_thresh_db + (density_flat_db - base_b1_thresh_db) * density_shape_amt;
+  b2_thresh_db = base_b2_thresh_db + (density_flat_db - base_b2_thresh_db) * density_shape_amt;
+  b3_thresh_db = base_b3_thresh_db + (density_flat_db - base_b3_thresh_db) * density_shape_amt;
+  b4_thresh_db = base_b4_thresh_db + (density_flat_db - base_b4_thresh_db) * density_shape_amt - 0.25 * shape_hi_amt;
+  b5_thresh_db = base_b5_thresh_db - 1.15 * shape_hi_amt;
+  b6_thresh_db = base_b6_thresh_db - 1.35 * shape_hi_amt;
+
+  b1_thresh = db2lin(b1_thresh_db);
+  b2_thresh = db2lin(b2_thresh_db);
+  b3_thresh = db2lin(b3_thresh_db);
+  b4_thresh = db2lin(b4_thresh_db);
+  b5_thresh = db2lin(b5_thresh_db);
+  b6_thresh = db2lin(b6_thresh_db);
+
+  adaptive_bass_foundation_guard_active = stream_foundation_mix > 0.0000001;
+
+  adapt_bass_model_70_l.biquad_lp_set(70, 0.70710678);
+  adapt_bass_model_70_r.biquad_lp_set(70, 0.70710678);
+  adapt_bass_model_250_l.biquad_lp_set(250, 0.70710678);
+  adapt_bass_model_250_r.biquad_lp_set(250, 0.70710678);
+  adapt_bass_model_420_l.biquad_lp_set(420, 0.70710678);
+  adapt_bass_model_420_r.biquad_lp_set(420, 0.70710678);
+  adapt_bass_model_3700_l.biquad_lp_set(3700, 0.70710678);
+  adapt_bass_model_3700_r.biquad_lp_set(3700, 0.70710678);
+  adapt_bass_model_det_attack = exp(-1/(srate_safe * 0.550));
+  adapt_bass_model_det_release = exp(-1/(srate_safe * 3.000));
+  adapt_bass_model_slow_attack = exp(-1/(srate_safe * 4.500));
+  adapt_bass_model_slow_release = exp(-1/(srate_safe * 10.000));
+
+  adapt_bass_model_fast_boost_attack_tick = exp(-16/(srate_safe * 1.200));
+  adapt_bass_model_fast_boost_release_tick = exp(-16/(srate_safe * 6.000));
+  adapt_bass_model_fast_cut_attack_tick = exp(-16/(srate_safe * 0.200));
+  adapt_bass_model_fast_cut_release_tick = exp(-16/(srate_safe * 6.000));
+  adapt_bass_model_boost_attack_tick = exp(-16/(srate_safe * 1.000));
+  adapt_bass_model_boost_release_tick = exp(-16/(srate_safe * 10.000));
+  adapt_bass_model_boost_suppress_tick = exp(-16/(srate_safe * 0.080));
+  adapt_bass_model_cut_attack_tick = exp(-16/(srate_safe * 0.250));
+  adapt_bass_model_cut_release_tick = exp(-16/(srate_safe * 10.000));
+  adapt_bass_model_cut_suppress_tick = exp(-16/(srate_safe * 1.200));
+  adapt_bass_model_cut_holdoff_samples = floor(srate_safe * 2.500 + 0.5);
+
+  adapt_bass_model_voice_return = exp(-1/(srate_safe * 2.200));
+  adapt_bass_model_voice_withdraw = exp(-1/(srate_safe * 0.300));
+
+  adapt_bass_amount = adaptive_bass_coupling;
+  adapt_bass_boost_scale = adaptive_bass_boost_curve(adapt_bass_amount);
+  adapt_bass_cut_authority = adaptive_bass_cut_curve(adapt_bass_amount);
+  adapt_bass_lab_max_cut_db = 5.0 * adapt_bass_cut_authority;
+
+  adapt_bass_lab_link = clamp(low_coherence_pct * 0.01, 0, 1);
+
+  adapt_bass_withdraw_authority = adapt_bass_cut_authority;
+
+  legacy_adapt_bass_split_a = 1 - exp(-2*$pi*190/srate_safe);
+  legacy_adapt_bass_det_attack = exp(-1/(srate_safe*0.420));
+  legacy_adapt_bass_det_release = exp(-1/(srate_safe*3.200));
+  legacy_adapt_bass_gain_up = exp(-1/(srate_safe*1.150));
+  legacy_adapt_bass_gain_down = exp(-1/(srate_safe*0.130));
+  legacy_adapt_bass_target_low = 0.33;
+  legacy_adapt_bass_target_high = 0.52;
+  legacy_adapt_bass_max_boost_db = 12.0*adaptive_bass_coupling;
+  legacy_adapt_bass_max_cut_db = 7.0*adaptive_bass_coupling;
+  stream_pre_final_drive_gain = db2lin(stream_pre_final_drive_db);
+
+  adapt_top_det_attack = exp(-1/(srate_safe * 0.360));
+  adapt_top_det_release = exp(-1/(srate_safe * 2.800));
+  adapt_top_gain_up = exp(-1/(srate_safe * 1.050));
+  adapt_top_gain_down = exp(-1/(srate_safe * 0.300));
+  adapt_top_edge_target_low = 0.17;
+  adapt_top_edge_target_high = 0.40;
+  adapt_top_air_target_low = 0.030;
+  adapt_top_air_target_high = 0.145;
+  adapt_top_presence_max_boost_db = 1.8 * adaptive_top_coupling;
+  adapt_top_presence_max_cut_db = 3.8 * adaptive_top_coupling;
+  adapt_top_air_max_boost_db = 3.6 * adaptive_top_coupling;
+  adapt_top_air_max_cut_db = 1.1 * adaptive_top_coupling;
+  adapt_top_air_hp_a = 1 - exp(-2*$pi*6800/srate_safe);
+
+  bass_clip_lo_a = 1 - exp(-2*$pi*300/srate_safe);
+  bass_clip_hi_a = 1 - exp(-2*$pi*650/srate_safe);
+  bass_clip_split_a = 1 - exp(-2*$pi*145/srate_safe);
+  bass_clip_subhp_a = 1 - exp(-2*$pi*28/srate_safe);
+  bass_clip_pre_res_a = 1 - exp(-2*$pi*220/srate_safe);
+  bass_clip_pre_th = ceiling * (0.20 - 0.10 * bass_clip);
+  bass_clip_pre_drive = 1.00 + 4.20 * bass_clip;
+  bass_clip_pre_amt = min(1, bass_clip * (0.95 + 0.15 * bass_clip));
+  bass_clip_makeup = 1.00 + 0.08 * bass_clip + 0.55 * bass_clip * bass_clip_density;
+  recomb_clip_thresh = ceiling * (0.97 - 0.16 * recomb_control);
+  recomb_clip_knee = 0.68 - 0.18 * recomb_control;
+
+  core_mode == 1 && final_style_blend > 0.0000001 ? (
+    clip_stage1 = clip_ref * (0.88 + (0.96-0.88)*final_style_blend);
+    clip_knee1 = 0.38 + (0.55-0.38)*final_style_blend;
+    clip_stage2 = clip_ref * (0.975 + (0.998-0.975)*final_style_blend);
+    clip_knee2 = 0.24 + (0.35-0.24)*final_style_blend;
+  ) : clipper_style_base == 0 ? (
+    clip_stage1 = clip_ref * 0.96; clip_knee1 = 0.55;
+    clip_stage2 = clip_ref * 0.998; clip_knee2 = 0.35;
+  ) : clipper_style_base == 1 ? (
+    clip_stage1 = clip_ref * 0.92; clip_knee1 = 0.46;
+    clip_stage2 = clip_ref * 0.990; clip_knee2 = 0.30;
+  ) : clipper_style_base == 2 ? (
+    clip_stage1 = clip_ref * 0.88; clip_knee1 = 0.38;
+    clip_stage2 = clip_ref * 0.975; clip_knee2 = 0.24;
+  ) : (
+    clip_stage1 = clip_ref * 0.80; clip_knee1 = 0.26;
+    clip_stage2 = clip_ref * 0.950; clip_knee2 = 0.18;
+  );
+
+  stereo_section_active = stereo_section_mode != 3;
+  stereo_section_active ? (
+    fm_preemph_mode == 1 || fm_preemph_mode == 3 ? (
+      pre_tau_sec = 0.000075;
+    ) : fm_preemph_mode == 2 || fm_preemph_mode == 4 ? (
+      pre_tau_sec = 0.000050;
+    ) : (
+      pre_tau_sec = 0;
+    );
+  ) : (
+    pre_tau_sec = 0;
+  );
+  pre_k = pre_tau_sec > 0 ? srate_safe * pre_tau_sec : 0;
+  deemph_after = stereo_section_active ? ((fm_preemph_mode == 1 || fm_preemph_mode == 2) ? 1 : 0) : 0;
+
+  width_mid_fast_attack = exp(-1/(srate_safe * 0.0015));
+  width_mid_fast_release = exp(-1/(srate_safe * 0.050));
+  width_mid_slow_attack = exp(-1/(srate_safe * 0.030));
+  width_mid_slow_release = exp(-1/(srate_safe * 0.250));
+  width_level_attack = exp(-1/(srate_safe * 0.008));
+  width_level_release = exp(-1/(srate_safe * 0.180));
+  width_gain_reduce = exp(-1/(srate_safe * 0.0005));
+  width_gain_restore = exp(-1/(srate_safe * 0.035));
+
+  bass_peak_l.biquad_peak_set(65, 1.4, bass_eq_work_db);
+  bass_peak_r.biquad_peak_set(65, 1.4, bass_eq_work_db);
+
+  transition_peak_gain_db = transition_fill * 1.6;
+  transition_peak_l.biquad_peak_set(105, 1.0, transition_peak_gain_db);
+  transition_peak_r.biquad_peak_set(105, 1.0, transition_peak_gain_db);
+
+  low_floor_gain_db = low_bass_floor * 0.65;
+  low_floor_l.biquad_peak_set(58, 0.75, low_floor_gain_db);
+  low_floor_r.biquad_peak_set(58, 0.75, low_floor_gain_db);
+
+  top_filter_mode == 1 ? (
+    lpf15_1_l.biquad_lp_set(17000, 0.55);
+    lpf15_1_r.biquad_lp_set(17000, 0.55);
+    lpf15_2_l.biquad_lp_set(21000, 0.50);
+    lpf15_2_r.biquad_lp_set(21000, 0.50);
+  ) : top_filter_mode == 2 ? (
+    lpf15_1_l.biquad_lp_set(15500, 0.58);
+    lpf15_1_r.biquad_lp_set(15500, 0.58);
+    lpf15_2_l.biquad_lp_set(15500, 0.58);
+    lpf15_2_r.biquad_lp_set(15500, 0.58);
+  ) : (
+    lpf15_1_l.biquad_lp_set(14500, 0.50);
+    lpf15_1_r.biquad_lp_set(14500, 0.50);
+    lpf15_2_l.biquad_lp_set(14500, 0.50);
+    lpf15_2_r.biquad_lp_set(14500, 0.50);
+  );
+
+  presence_edge_recovery_gain = db2lin(presence_db * 0.24 * shape_hi_amt);
+  presence_body_recovery_gain = db2lin(presence_db * 0.42 * shape_hi_amt);
+  brilliance_recovery_gain = db2lin(brilliance_db * 0.50 * shape_hi_amt);
+
+  shape_block_size = 32;
+  shape_servo_lvl_a_blk = 1 - pow(1 - shape_servo_lvl_a, shape_block_size);
+  shape_servo_gain_a_blk = 1 - pow(1 - shape_servo_gain_a, shape_block_size);
+
+  (mb_shape == 0 && shape_hi_amt == 0) ? (
+    shape_servo_active = 0;
+    shape_servo1_db = 0; shape_servo2_db = 0; shape_servo3_db = 0;
+    shape_servo4_db = 0; shape_servo5_db = 0; shape_servo6_db = 0;
+    shape_servo_gain1 = 1; shape_servo_gain2 = 1; shape_servo_gain3 = 1;
+    shape_servo_gain4 = 1; shape_servo_gain5 = 1; shape_servo_gain6 = 1;
+    shape_power_accum1 = shape_power_accum2 = shape_power_accum3 = 0;
+    shape_power_accum4 = shape_power_accum5 = shape_power_accum6 = 0;
+    shape_block_counter = 0;
+  ) : (
+    shape_servo_active = 1;
+  );
+
+  fcs_residue_a = 1 - exp(-2*$pi*12000/srate_safe);
+
+  inv_agc_drive_safe = 1.0 / max(agc_drive, 0.000001);
+  inv_level_factor_denom = 1.0 / max(ceiling * 0.35, 0.000001);
+  inv_const_db2lin_minus28 = 1.0 / max(const_db2lin_minus28, 0.000001);
+  inv_const_db2lin_minus6 = 1.0 / max(const_db2lin_minus6, 0.000001);
+  at_edge_dull_inv_denom = 1.0 / max(adapt_top_edge_target_low - 0.060, 0.000001);
+  at_edge_bright_inv_denom = 1.0 / max(0.78 - adapt_top_edge_target_high, 0.000001);
+  at_air_dull_inv_denom = 1.0 / max(adapt_top_air_target_low - 0.006, 0.000001);
+  at_air_bright_inv_denom = 1.0 / max(0.38 - adapt_top_air_target_high, 0.000001);
+);
+
+shape_servo_gain1 = shape_servo_gain2 = shape_servo_gain3 = 1;
+shape_servo_gain4 = shape_servo_gain5 = shape_servo_gain6 = 1;
+shape_servo1_db = shape_servo2_db = shape_servo3_db = 0;
+shape_servo4_db = shape_servo5_db = shape_servo6_db = 0;
+shape_power_accum1 = shape_power_accum2 = shape_power_accum3 = 0;
+shape_power_accum4 = shape_power_accum5 = shape_power_accum6 = 0;
+shape_block_counter = 0;
+presence_edge_recovery_gain = 1;
+presence_body_recovery_gain = 1;
+brilliance_recovery_gain = 1;
+
+shape_rec_block_size = 16;
+shape_rec_count = 0;
+shape_rec_heavy_tick = 1;
+comp_rec1_gain = comp_rec2_gain = comp_rec3_gain = 1;
+lim_rec1_gain = lim_rec2_gain = lim_rec3_gain = 1;
+shape_rec_comp_ratio1_blk = shape_rec_comp_ratio2_blk = shape_rec_comp_ratio3_blk = 1;
+shape_rec_lim_ratio1_blk = shape_rec_lim_ratio2_blk = shape_rec_lim_ratio3_blk = 1;
+
+shape_rec_attack = 1 - exp(-1/(srate_safe * 0.320));
+shape_rec_release = 1 - exp(-1/(srate_safe * 0.070));
+shape_rec_attack_blk = 1 - pow(1 - shape_rec_attack, shape_rec_block_size);
+shape_rec_release_blk = 1 - pow(1 - shape_rec_release, shape_rec_block_size);
+shape_servo_lvl_a = 1 - exp(-1/(srate_safe * 2.400));
+shape_servo_gain_a = 1 - exp(-1/(srate_safe * 0.900));
+
+core_last_mode = -1;
+core_initial_apply = 1;
+gui_last_mouse_down = 0;
+
+function core_stage(x a b) local(t)
+(
+  t = clamp((x-a)/max(b-a,0.000001),0,1);
+  t*t*(3-2*t);
+);
+
+function hybrid_smooth01(x) local(t)
+(
+  t=clamp(x,0,1);
+  t*t*(3-2*t);
+);
+function hybrid_shave(x lim depth) local(ax s ks span over y)
+(
+  ax=abs(x);
+  ks=lim*db2lin(-max(depth,0.001));
+  span=max(lim-ks,0.000000000001);
+  ax<=ks ? x : (
+    s=x<0?-1:1;
+    over=ax-ks;
+    y=ks+span*(1-exp(-over/span));
+    s*min(y,lim);
+  );
+);
+function hybrid_hist_idx(p) local(q)
+(
+  q=floor(p/hybrid_buf_len);
+  p-q*hybrid_buf_len;
+);
+function hybrid_corr(now) local(best base lag si t off ai_abs bi_abs ai bi dot ea eb cnt c k aa0 aa1 bb0 bb1)
+(
+  best=-1;
+  k=0;
+  loop(3,
+    k==0 ? base=hybrid_onset1>-100000000?now-hybrid_onset1:0;
+    k==1 ? base=hybrid_onset2>-100000000?now-hybrid_onset2:0;
+    k==2 ? base=hybrid_onset3>-100000000?now-hybrid_onset3:0;
+    base>=hybrid_period_min && base<=hybrid_period_max ? (
+      si=-3;
+      loop(7,
+        lag=floor(base*(1+0.04*si/3)+0.5);
+        lag>=hybrid_period_min && lag<=hybrid_period_max ? (
+          dot=0; ea=0; eb=0; cnt=0; t=0;
+          loop(8,
+            off=floor(t*max(1,lag-1)/7+0.5);
+            ai_abs=now-off; bi_abs=ai_abs-lag;
+            bi_abs>=0 ? (
+              ai=hybrid_hist_idx(ai_abs); bi=hybrid_hist_idx(bi_abs);
+              aa0=hybrid_raw_l[ai]; aa1=hybrid_raw_r[ai]; bb0=hybrid_raw_l[bi]; bb1=hybrid_raw_r[bi];
+              dot+=aa0*bb0+aa1*bb1; ea+=aa0*aa0+aa1*aa1; eb+=bb0*bb0+bb1*bb1; cnt+=1;
+            );
+            t+=1;
+          );
+          cnt>=3 && ea>0.000000000001 && eb>0.000000000001 ? (c=dot/sqrt(ea*eb); c>best?best=c;);
+        );
+        si+=1;
+      );
+    );
+    k+=1;
+  );
+  max(0,best);
+);
+
+hybrid_base=100000;
+hybrid_buf_len=floor(srate_safe*0.064+0.5)+256;
+hybrid_raw_l=hybrid_base;
+hybrid_raw_r=hybrid_raw_l+hybrid_buf_len;
+hybrid_burden=hybrid_raw_r+hybrid_buf_len;
+hybrid_eventgate=hybrid_burden+hybrid_buf_len;
+hybrid_candidate_l=hybrid_eventgate+hybrid_buf_len;
+hybrid_candidate_r=hybrid_candidate_l+hybrid_buf_len;
+hybrid_shaved_l=hybrid_candidate_r+hybrid_buf_len;
+hybrid_shaved_r=hybrid_shaved_l+hybrid_buf_len;
+hybrid_required=hybrid_shaved_r+hybrid_buf_len;
+hybrid_worklim=hybrid_required+hybrid_buf_len;
+hybrid_makeup=hybrid_worklim+hybrid_buf_len;
+hybrid_energy_len=floor(srate_safe*0.040+0.5)+64;
+hybrid_refe=hybrid_makeup+hybrid_buf_len;
+hybrid_deltae=hybrid_refe+hybrid_energy_len;
+hybrid_required_active=hybrid_deltae+hybrid_energy_len;
+hybrid_write=0;
+hybrid_clock=0;
+hybrid_energy_write=0;
+hybrid_energy_count=0;
+hybrid_window_spl=-1;
+hybrid_classifier_spl=-1;
+hybrid_limiter_spl=-1;
+hybrid_total_spl=0;
+hybrid_ref_sum=0;
+hybrid_delta_sum=0;
+hybrid_burden_accept=1;
+hybrid_gain=1;
+hybrid_limiter_active_count=0;
+hybrid_limiter_window_tracked=0;
+hybrid_candidate_prev=0;
+hybrid_event_start_abs=-1;
+hybrid_event_start_ring=0;
+hybrid_event_corr=0;
+hybrid_onset1=-1000000000;
+hybrid_onset2=-1000000000;
+hybrid_onset3=-1000000000;
 
 @slider
 
-core_mode = floor(clamp(core_mode, 0, 2) + 0.5);
-auto_adapt_pct = clamp(auto_adapt_pct, 0, 100);
-input_drive_db = clamp(input_drive_db, -12, 18);
-
-core_default_input_db = core_mode == 0 ? 3.5 : core_mode == 1 ? 4.5 : 0;
-// Only force the recommended Input Drive when the user actually changes Mode.
-// Do not treat first @slider after load/reinit/play/render as a mode change,
-// because that overwrites saved/manual Input Drive settings.
-core_mode_changed = (core_last_mode >= 0) && (core_mode != core_last_mode);
-
-core_last_mode < 0 ? (
-  core_last_mode = core_mode;
-) : core_mode_changed ? (
+core_mode = floor(clamp(core_mode,0,2)+0.5);
+auto_adapt_pct = clamp(auto_adapt_pct,0,100);
+input_drive_db = clamp(input_drive_db,-12,18);
+core_default_input_db = core_mode == 0 ? 3.5 : 0;
+core_mode_changed = core_last_mode >= 0 && core_mode != core_last_mode;
+core_last_mode < 0 ? core_last_mode = core_mode : core_mode_changed ? (
   input_drive_db = core_default_input_db;
   sliderchange(2);
   core_state_reset = 1;
+  core_last_mode = core_mode;
 );
 
+a = auto_adapt_pct*0.01;
+w = core_stage(a,0.00,0.35);
+b = core_stage(a,0.18,0.82);
+g = core_stage(a,0.35,0.88);
+d = core_stage(a,0.50,0.78);
+h = core_stage(a,0.50,0.80); // Broadcast Shape now tracks the Stream 42.5 Hz HPF progression.
+f = core_stage(a,0.50,1.00);
+stream_foundation_mix = core_mode == 1 ? b : 0;
+stream_hpf_mix = core_mode == 1 ? core_stage(a,0.50,0.80) : 0;
+final_style_blend = core_mode == 1 ? f : 0;
+stream_hybrid_mix = core_mode == 1 ? f : core_mode == 2 ? 1 : 0;
+
+input_trim_db = input_drive_db;
+lookahead_mode = 1;
+input_section_mode = 0;
+agc_section_mode = 0;
+bass_section_mode = 0;
+xt2_section_mode = 0;
+stereo_section_mode = 0;
+final_section_mode = 0;
+fm_preemph_mode = 0;
+stereo_mode = 0;
+meter_reset = 0;
+meter_view = 0;
+meter_stage_name = 0;
+meter_selected_value = -120;
+first_hit_catch_pct = 0;
+output_trim_db = 0;
+clip_ceiling_db = -0.1;
+top_filter_mode = 0;
+smooth_drive_rounder_pct = 0;
+stream_pre_final_drive_db = 0;
+agc_max_gain_db = 9;
+
 core_mode == 0 ? (
-  input_trim_db = 3.5;
   phase_rotate_pct = 3;
   subsonic_hpf = 1;
-  agc_amount_pct = 65;
-  agc_drive_db = 0.5;
-  release_time = 7;
-  pd_release_pct = 70;
+  agc_amount_pct = 65 + 20*a;
+  agc_drive_db = 0.5*(1-a);
+  release_time = 7 - 1.8*a*a;
+  pd_release_pct = 70 + 14*a;
   gate_threshold_db = -20;
-  gate_reopen_speed_ms = 40;
-  gate_reopen_strength_pct = 65;
-  first_hit_catch_pct = 0;
+  gate_reopen_speed_ms = 40 - 4*a;
+  gate_reopen_strength_pct = 65 - 5*a*a;
   post_agc_smooth_drive_pct = 25;
   bass_coupling_pct = 70;
   bass_eq_db = 2;
-  bass_sc_relief_pct = 35;
+  bass_sc_relief_pct = 35 + 21*a;
   low_bass_floor_pct = 15;
   low_coherence_pct = 65;
-  low_release_stab_pct = 70;
+  low_release_stab_pct = 70 + 12*a;
   transition_fill_pct = 18;
-  adaptive_bass_coupling_pct = 12;
+  adaptive_bass_coupling_pct = 12 + 10*a;
   bass_clip_pct = 8;
   bass_clip_density_pct = 0;
   density_db = 0;
+  mb_shape_pct = 0;
   xt2_amount_pct = 100;
+  mb_clip_pct = 0;
+  mb_limiter_depth_pct = 50;
+  mb_comp_limiter_pct = 0;
+  recomb_control_pct = 0;
   presence_db = 2;
   brilliance_db = 2;
-  adaptive_top_coupling_pct = 50;
+  adaptive_top_coupling_pct = 50 + 22*a;
   crossover_model = 2;
-  mb_clip_pct = 0;
-  clip_drive_db = 0;
-  recomb_control_pct = 0;
+  clip_drive_db = -0.7*a;
   dc_cancel_pct = 65;
   upper_snubber_pct = 0;
   snubber_lookahead_ms = 1.5;
-  post_xt2_smooth_drive_pct = 10;
-  stereo_mode = 0;
+  post_xt2_smooth_drive_pct = 10 + 2*a;
+  density_output_db = 0;
+  stream_pre_final_drive_db = -1.5;
   stereo_width_pct = 100;
-  pre_final_drive_db = -1.5;
+  top_filter_mode = 2;
+  output_trim_db = 0;
+  smooth_drive_rounder_pct = 58;
   clipper_style = 0;
   pre_limiter_pct = 100;
   clip_restraint_pct = 100;
@@ -538,62 +1557,66 @@ core_mode == 0 ? (
   lookahead_ms = 0.36;
   final_threshold_db = -1.5;
   final_threshold_makeup_pct = 100;
-  clip_ceiling_db = -0.1;
-  top_filter_mode = 2;
-  output_trim_db = 0;
-  smooth_drive_rounder_pct = 58;
+  hybrid_sat_ceiling = 0;
+  hybrid_classifier_ms = 0;
+  hybrid_limiter_ms = 0;
 ) : core_mode == 1 ? (
-  input_trim_db = 4.5;
   phase_rotate_pct = 5;
-  agc_amount_pct = 56;
-  agc_drive_db = 0;
-  bass_coupling_pct = 50;
-  release_time = 5;
-  gate_threshold_db = -30;
+  subsonic_hpf = 0;
+  agc_amount_pct = 56 + (50-56)*g;
+  agc_drive_db = 0.2*g;
+  release_time = 5 + 1.1*g;
+  pd_release_pct = 78;
+  gate_threshold_db = -30 - 5*g;
   gate_reopen_speed_ms = 50;
   gate_reopen_strength_pct = 55;
-  density_db = 3.5;
-  xt2_amount_pct = 84;
+  agc_max_gain_db = 14;
+  post_agc_smooth_drive_pct = 12 + 2*g;
+  bass_coupling_pct = 50 + 10*b;
   bass_eq_db = 3.6;
-  presence_db = 2.3;
-  brilliance_db = 3.2;
-  clip_drive_db = -0.8;
-  clipper_style = 2;
-  pre_limiter_pct = 44;
-  clip_restraint_pct = 38;
-  clip_ceiling_db = -0.1;
-  final_threshold_db = -0.8;
-  final_threshold_makeup_pct = 100;
-  stereo_mode = 0;
-  stereo_width_pct = 100;
-  top_filter_mode = 0;
-  subsonic_hpf = 0;
-  output_trim_db = 1.1;
-  mb_clip_pct = 16;
-  dc_cancel_pct = 46;
-  overshoot_pct = 100;
-  recomb_control_pct = 10;
-  lookahead_ms = 0.54;
-  crossover_model = 2;
-  pd_release_pct = 78;
   bass_sc_relief_pct = 76;
-  low_coherence_pct = 66;
+  low_bass_floor_pct = 42;
+  low_coherence_pct = 66 + 16*b;
   low_release_stab_pct = 74;
   transition_fill_pct = 12;
-  low_bass_floor_pct = 42;
   adaptive_bass_coupling_pct = 65;
-  adaptive_top_coupling_pct = 50;
-  bass_clip_pct = 32;
+  bass_clip_pct = 32 + 8*b;
   bass_clip_density_pct = 6;
-  upper_snubber_pct = 20;
+  legacy_density_db = 3.5 + 0.3*a;
+  density_db = legacy_density_db + (3.2-legacy_density_db)*d;
+  mb_shape_pct = 100*h;
+  xt2_amount_pct = 84;
+  mb_clip_pct = 16 + 8*d;
+  mb_limiter_depth_pct = 50;
+  mb_comp_limiter_pct = 60*d;
+  recomb_control_pct = 10;
+  presence_db = 2.3;
+  brilliance_db = 3.2;
+  adaptive_top_coupling_pct = 50;
+  crossover_model = 2;
+  clip_drive_db = -0.8;
+  dc_cancel_pct = 46 + (18-46)*f;
+  upper_snubber_pct = 20 + (68-20)*f;
   snubber_lookahead_ms = 0.73;
-  first_hit_catch_pct = 0;
-  post_agc_smooth_drive_pct = 12;
-  post_xt2_smooth_drive_pct = 12;
-  pre_final_drive_db = -0.4;
-  smooth_drive_rounder_pct = 50;
+  post_xt2_smooth_drive_pct = 12 + (20-12)*f;
+  density_output_db = 0;
+  stream_pre_final_drive_db = -0.4 + 0.4*f;
+  stereo_width_pct = 100 + 50*w;
+  top_filter_mode = 0;
+  output_trim_db = 1.1*(1-f);
+  smooth_drive_rounder_pct = (50 + 4*a)*(1-f);
+  clipper_style = 2;
+  pre_limiter_pct = 44 + 2*f;
+  clip_restraint_pct = 38 - 12*f;
+  overshoot_pct = 100;
+  legacy_final_lookahead_ms = 0.54 + (0.70-0.54)*a;
+  lookahead_ms = legacy_final_lookahead_ms + (0.54-legacy_final_lookahead_ms)*f;
+  final_threshold_db = -0.8 - 0.6*f;
+  final_threshold_makeup_pct = 100;
+  hybrid_sat_ceiling = 1;
+  hybrid_classifier_ms = 1.5;
+  hybrid_limiter_ms = 2.0;
 ) : (
-  input_trim_db = 0;
   phase_rotate_pct = 0;
   subsonic_hpf = 0;
   agc_amount_pct = 0;
@@ -603,7 +1626,6 @@ core_mode == 0 ? (
   gate_threshold_db = -70;
   gate_reopen_speed_ms = 50;
   gate_reopen_strength_pct = 0;
-  first_hit_catch_pct = 0;
   post_agc_smooth_drive_pct = 0;
   bass_coupling_pct = 0;
   bass_eq_db = 0;
@@ -615,475 +1637,241 @@ core_mode == 0 ? (
   adaptive_bass_coupling_pct = 0;
   bass_clip_pct = 25;
   bass_clip_density_pct = 0;
-  density_db = -0.4;
+  density_db = -0.4 - 0.4*a;
+  mb_shape_pct = 0;
   xt2_amount_pct = 10;
+  mb_clip_pct = 20;
+  mb_limiter_depth_pct = 50;
+  mb_comp_limiter_pct = 0;
+  recomb_control_pct = 6;
   presence_db = 0;
   brilliance_db = 0;
   adaptive_top_coupling_pct = 0;
   crossover_model = 2;
-  mb_clip_pct = 20;
-  clip_drive_db = 0;
-  recomb_control_pct = 6;
+  clip_drive_db = -0.6*a;
   dc_cancel_pct = 0;
   upper_snubber_pct = 32;
-  snubber_lookahead_ms = 1.5;
-  post_xt2_smooth_drive_pct = 12;
-  stereo_mode = 0;
+  snubber_lookahead_ms = 1.5 + 0.5*a;
+  post_xt2_smooth_drive_pct = 12 + 8*a;
+  density_output_db = 0;
+  stream_pre_final_drive_db = -1.6 - 1.4*a;
   stereo_width_pct = 100;
-  pre_final_drive_db = -1.6;
+  top_filter_mode = 0;
+  output_trim_db = 0;
+  smooth_drive_rounder_pct = 0;
   clipper_style = 0;
   pre_limiter_pct = 100;
   clip_restraint_pct = 60;
   overshoot_pct = 100;
-  lookahead_ms = 0.73;
-  final_threshold_db = -2;
+  lookahead_ms = 0.73 + 0.77*a;
+  final_threshold_db = -2 - a;
   final_threshold_makeup_pct = 100;
-  clip_ceiling_db = -0.1;
-  top_filter_mode = 0;
-  output_trim_db = 0;
-  smooth_drive_rounder_pct = 50;
+  hybrid_sat_ceiling = 1;
+  hybrid_classifier_ms = 2.0;
+  hybrid_limiter_ms = 2.0;
 );
 
+preset_default_snubber_lookahead_ms = snubber_lookahead_ms;
+preset_default_final_lookahead_ms = lookahead_ms;
+lookahead_mode = floor(clamp(lookahead_mode, 0, 2) + 0.5);
+lookahead_mode == 0 ? (
+  snubber_lookahead_ms = 0.18;
+  lookahead_ms = 0.36;
+) : lookahead_mode == 1 ? (
+  snubber_lookahead_ms = preset_default_snubber_lookahead_ms;
+  lookahead_ms = preset_default_final_lookahead_ms;
+) : (
+  snubber_lookahead_ms = 1.50;
+  lookahead_ms = 1.50;
+);
 processor_mode = core_mode == 2 ? 1 : 0;
 
-core_last_mode = core_mode;
-
-input_trim_db = clamp(input_drive_db, -12, 18);
-
-// Auto-Adapt is now a normal percent control:
-// 0 percent = exact neutral mode, 100 percent = stronger adapted side.
-core_auto_down = 0;
-core_auto_up = clamp(auto_adapt_pct * 0.01, 0, 1);
-
-core_mode == 0 ? (
-  // Podcast Adapt 0 stays at the established Core Podcast sound.
-  // Higher Adapt now means more leveling/protection, not more drive into clipping.
-  agc_amount_pct = 65 + (85 - 65) * core_auto_up;
-  agc_drive_db = 0.5 + (0.0 - 0.5) * core_auto_up;
-  release_time = 7 + (5.2 - 7) * (core_auto_up * core_auto_up);
-  pd_release_pct = 70 + (84 - 70) * core_auto_up;
-  gate_threshold_db = -20;
-  gate_reopen_speed_ms = 40 + (36 - 40) * core_auto_up;
-  gate_reopen_strength_pct = 65 + (60 - 65) * (core_auto_up * core_auto_up);
-  first_hit_catch_pct = 0;
-  post_agc_smooth_drive_pct = 25;
-  bass_coupling_pct = 70;
-  bass_sc_relief_pct = 35 + (56 - 35) * core_auto_up;
-  low_coherence_pct = 65;
-  low_release_stab_pct = 70 + (82 - 70) * core_auto_up;
-  adaptive_bass_coupling_pct = 12 + (22 - 12) * core_auto_up;
-  density_db = 0;
-  adaptive_top_coupling_pct = 50 + (72 - 50) * core_auto_up;
-  post_xt2_smooth_drive_pct = 10 + (12 - 10) * core_auto_up;
-  pre_final_drive_db = -1.5;
-  clip_drive_db = 0 + (-0.7 - 0) * core_auto_up;
-  overshoot_pct = 100;
-  lookahead_ms = lookahead_ms;
-  final_threshold_db = -1.5;
-  final_threshold_makeup_pct = 100;
-  clip_ceiling_db = -0.1;
-);
-
-core_mode == 1 ? (
-  // Stream Adapt 0 stays anchored to the established Stream polish sound.
-  // Higher Adapt stabilizes mixed program material without pulling down loudness against the ceiling.
-  agc_amount_pct = 56 + (62 - 56) * core_auto_up;
-  agc_drive_db = 0;
-  release_time = 5 + (5.6 - 5) * core_auto_up;
-  pd_release_pct = 78 + (76 - 78) * core_auto_up;
-  gate_threshold_db = -30 + 2 * core_auto_up;
-  gate_reopen_speed_ms = 50;
-  gate_reopen_strength_pct = 55 + (48 - 55) * core_auto_up;
-  first_hit_catch_pct = 0;
-  post_agc_smooth_drive_pct = 12 + (14 - 12) * core_auto_up;
-  bass_coupling_pct = 50 + (52 - 50) * core_auto_up;
-  bass_eq_db = 3.6 + (3.4 - 3.6) * core_auto_up;
-  bass_sc_relief_pct = 76 + (70 - 76) * core_auto_up;
-  low_bass_floor_pct = 42 + (34 - 42) * core_auto_up;
-  low_coherence_pct = 66 + (58 - 66) * core_auto_up;
-  low_release_stab_pct = 74 + (72 - 74) * core_auto_up;
-  adaptive_bass_coupling_pct = 65 + (72 - 65) * core_auto_up;
-  density_db = 3.5 + (3.8 - 3.5) * core_auto_up;
-  presence_db = 2.3;
-  brilliance_db = 3.2;
-  adaptive_top_coupling_pct = 50;
-  post_xt2_smooth_drive_pct = 12 + (14 - 12) * core_auto_up;
-  pre_final_drive_db = -0.4;
-  clip_drive_db = -0.8;
-  overshoot_pct = 100;
-  lookahead_ms = 0.54 + (0.70 - 0.54) * core_auto_up;
-  final_threshold_db = -0.8;
-  final_threshold_makeup_pct = 100;
-  clip_ceiling_db = -0.1;
-  smooth_drive_rounder_pct = 50 + (54 - 50) * core_auto_up;
-  // Keep Stream polish clipper behavior consistent across Auto-Adapt.
-  clipper_style = 2;
-);
-
-core_mode == 2 ? (
-  density_db = -0.4 + (-1.2 + 0.4) * core_auto_down + (-0.8 + 0.4) * core_auto_up;
-  snubber_lookahead_ms = 1.5 + (1.5 - 1.5) * core_auto_down + (2.0 - 1.5) * core_auto_up;
-  post_xt2_smooth_drive_pct = 12 + (4 - 12) * core_auto_down + (20 - 12) * core_auto_up;
-  pre_final_drive_db = -1.6 + (-2 + 1.6) * core_auto_down + (-3.0 + 1.6) * core_auto_up;
-  clip_drive_db = 0 + (0 - 0) * core_auto_down + (-0.6 - 0) * core_auto_up;
-  overshoot_pct = 100 + (100 - 100) * core_auto_down + (100 - 100) * core_auto_up;
-  lookahead_ms = 0.73 + (0.73 - 0.73) * core_auto_down + (1.5 - 0.73) * core_auto_up;
-  final_threshold_db = -2 + (-2 + 2) * core_auto_down + (-3.0 + 2) * core_auto_up;
-  final_threshold_makeup_pct = 100 + (100 - 100) * core_auto_down + (100 - 100) * core_auto_up;
-  clip_ceiling_db = -0.1;
-  smooth_drive_rounder_pct = 50 + (30 - 50) * core_auto_down + (65 - 50) * core_auto_up;
-);
-
+input_section_mode = floor(clamp(input_section_mode, 0, 3) + 0.5);
+agc_section_mode = floor(clamp(agc_section_mode, 0, 3) + 0.5);
+bass_section_mode = floor(clamp(bass_section_mode, 0, 3) + 0.5);
+xt2_section_mode = floor(clamp(xt2_section_mode, 0, 3) + 0.5);
 adaptive_top_coupling_pct = clamp(adaptive_top_coupling_pct, 0, 100);
-output_trim_db = clamp(output_trim_db, -12, 3);
+recomb_control_pct = clamp(recomb_control_pct, 0, 10);
+stereo_section_mode = floor(clamp(stereo_section_mode, 0, 3) + 0.5);
+stereo_mode = floor(clamp(stereo_mode, 0, 1) + 0.5);
+stereo_width_pct = clamp(stereo_width_pct, 0, 150);
+final_section_mode = floor(clamp(final_section_mode, 0, 3) + 0.5);
 
-input_gain = db2lin(input_trim_db);
-agc_drive = db2lin(agc_drive_db);
-density_pos_db = max(density_db, 0);
-density_neg_db = min(density_db, 0);
+update_derived_params();
 
-density_audio_gain = db2lin(density_neg_db + density_pos_db * 0.35);
-density_detector_gain = db2lin(density_pos_db * 0.65);
-density_clip_drive = db2lin(density_pos_db * 0.55);
-presence_gain = db2lin(presence_db);
-brilliance_gain = db2lin(brilliance_db);
+hybrid_new_window=max(1,min(floor(srate_safe*0.008+0.5),hybrid_energy_len-2));
+hybrid_new_classifier=floor(srate_safe*hybrid_classifier_ms*0.001+0.5);
+hybrid_new_limiter=floor(srate_safe*hybrid_limiter_ms*0.001+0.5);
+hybrid_new_total=hybrid_new_classifier+hybrid_new_limiter;
+hybrid_new_window!=hybrid_window_spl || hybrid_new_classifier!=hybrid_classifier_spl || hybrid_new_limiter!=hybrid_limiter_spl ? (
+  hybrid_window_spl=hybrid_new_window;
+  hybrid_classifier_spl=hybrid_new_classifier;
+  hybrid_limiter_spl=hybrid_new_limiter;
+  hybrid_total_spl=hybrid_new_total;
+  hybrid_write=0; hybrid_clock=0; hybrid_energy_write=0; hybrid_energy_count=0;
+  hybrid_ref_sum=0; hybrid_delta_sum=0; hybrid_burden_accept=1; hybrid_gain=1;
+  hybrid_limiter_active_count=0; hybrid_limiter_window_tracked=0;
+  hybrid_candidate_prev=0; hybrid_event_start_abs=-1;
+  hybrid_onset1=-1000000000; hybrid_onset2=-1000000000; hybrid_onset3=-1000000000;
+  i=0; loop(hybrid_buf_len,
+    hybrid_raw_l[i]=0; hybrid_raw_r[i]=0; hybrid_burden[i]=1; hybrid_eventgate[i]=0;
+    hybrid_candidate_l[i]=0; hybrid_candidate_r[i]=0; hybrid_shaved_l[i]=0; hybrid_shaved_r[i]=0;
+    hybrid_required[i]=1; hybrid_worklim[i]=ceiling; hybrid_makeup[i]=1; i+=1;
+  );
+  i=0; loop(hybrid_energy_len,hybrid_refe[i]=0;hybrid_deltae[i]=0;i+=1;);
+  i=0; loop(hybrid_buf_len,hybrid_required_active[i]=0;i+=1;);
+);
+hybrid_burden_attack=exp(-1/max(1,srate_safe*0.00025));
+hybrid_burden_release=exp(-1/max(1,srate_safe*0.008));
+hybrid_limiter_release=exp(-1/max(1,srate_safe*0.030));
+hybrid_period_min=max(2,floor(srate_safe*0.00025+0.5));
+hybrid_period_max=max(hybrid_period_min+1,min(floor(16384/3),floor(srate_safe*0.020+0.5)));
 
-clip_drive_mb = db2lin(clip_drive_db * 0.60);
-clip_drive_full = db2lin(clip_drive_db * 0.25);
-ceiling = db2lin(clip_ceiling_db);
-final_threshold_db = clamp(final_threshold_db, -24, 6);
-final_threshold_makeup_pct = clamp(final_threshold_makeup_pct, 0, 100);
-
-final_threshold_drive_target = db2lin(-final_threshold_db);
-final_threshold_makeup = final_threshold_makeup_pct * 0.01;
-smooth_drive_rounder_amt = clamp(smooth_drive_rounder_pct, 0, 100) * 0.01;
-post_agc_smooth_drive_amt = clamp(post_agc_smooth_drive_pct, 0, 25) * 0.01;
-post_xt2_smooth_drive_amt = clamp(post_xt2_smooth_drive_pct, 0, 50) * 0.01;
-
-post_agc_smooth_recovery_gain = db2lin(2.0 * clamp(post_agc_smooth_drive_pct, 0, 25) / 25.0);
-post_xt2_smooth_recovery_gain = db2lin(2.0 * clamp(post_xt2_smooth_drive_pct, 0, 50) / 50.0);
-pre_final_drive_gain = db2lin(clamp(pre_final_drive_db, -12, 12));
-output_gain = db2lin(output_trim_db);
-
-mb_clip_mix = mb_clip_pct * 0.01;
-dc_cancel = dc_cancel_pct * 0.01;
-dc3_amt = dc_cancel * 0.35;
-dc4_amt = dc_cancel * 0.55;
-dc5_amt = dc_cancel * 0.78;
-dc6_amt = dc_cancel * 0.92;
-overshoot_amt = overshoot_pct * 0.01;
-recomb_control = recomb_control_pct * 0.01;
-crossover_model = floor(clamp(crossover_model, 0, 3) + 0.5);
-pd_release = pd_release_pct * 0.01;
-upper_snubber = upper_snubber_pct * 0.01;
-first_hit_catch = 0; // startup peak catch retired
-gate_reopen_strength = gate_reopen_strength_pct * 0.01;
-gate_reopen_speed_sec = max(gate_reopen_speed_ms * 0.001, 0.005);
-
-snubber_lookahead_ms = clamp(snubber_lookahead_ms, 0, 1.50);
-lookahead_ms = clamp(lookahead_ms, 0, 1.50);
-processor_mode = floor(clamp(processor_mode, 0, 1) + 0.5);
-subsonic_hpf = floor(clamp(subsonic_hpf, 0, 1) + 0.5);
-top_filter_mode = floor(clamp(top_filter_mode, 0, 3) + 0.5);
-effective_snubber_lookahead = (upper_snubber > 0 && snubber_lookahead_ms > 0) ? min(snub_buf_len - 1, floor(srate * snubber_lookahead_ms * 0.001 + 0.5)) : 0;
-effective_final_lookahead = (overshoot_amt > 0 && lookahead_ms > 0) ? min(fcs_buf_len - 1, floor(srate * lookahead_ms * 0.001 + 0.5)) : 0;
-mastering_lookahead_samps = processor_mode == 1 ? min(master_buf_len - 1, floor(srate * 0.010 + 0.5)) : 0;
-
-master_startup_prime_window = floor(srate * 0.350 + 0.5);
-master_startup_active_thresh = db2lin(-70);
-
-path_delay = mastering_lookahead_samps + effective_snubber_lookahead + effective_final_lookahead;
-pdc_delay = path_delay;
+pdc_delay = path_delay + hybrid_total_spl;
 pdc_bot_ch = 0;
 pdc_top_ch = 2;
 
-phase_legacy_val = phase_rotate_pct;
-phase_legacy_val > 6 ? (
-  phase_rotate_pct = 6;
-  phase_legacy_val < 85 ? phase_rotate_pct = 5;
-  phase_legacy_val < 70 ? phase_rotate_pct = 4;
-  phase_legacy_val < 58 ? phase_rotate_pct = 3;
-  phase_legacy_val < 42 ? phase_rotate_pct = 2;
-  phase_legacy_val < 20 ? phase_rotate_pct = 1;
-);
-phase_mode = floor(clamp(phase_rotate_pct, 0, 6) + 0.5);
-phase_rotate_pct = phase_mode;
-phase_mode != phase_mode_last ? (
-  reset_phase_state();
-  phase_mode_last = phase_mode;
-);
-phase_stages = 0;
-phase_mode == 1 ? phase_stages = 2;
-phase_mode == 2 ? phase_stages = 4;
-phase_mode == 3 ? phase_stages = 6;
-phase_mode == 4 ? phase_stages = 8;
-phase_mode == 5 ? phase_stages = 10;
-phase_mode == 6 ? phase_stages = 12;
-
-phase_f1 = 55;
-phase_f2 = 85;
-phase_f3 = 130;
-phase_f4 = 200;
-phase_f5 = 310;
-phase_f6 = 480;
-phase_f7 = 740;
-phase_f8 = 1150;
-phase_f9 = 1800;
-phase_f10 = 2800;
-phase_f11 = 4300;
-phase_f12 = 6500;
-agc_mix = agc_amount_pct * 0.01;
-
-agc_down_mix = agc_mix <= 0.50 ? agc_mix : 0.50 + (agc_mix - 0.50) * 0.40;
-xt2_mix = xt2_amount_pct * 0.01;
-adaptive_top_coupling = adaptive_top_coupling_pct * 0.01;
-
-bass_coupling = bass_coupling_pct * 0.01;
-bass_eq_work_db = bass_eq_db;
-bass_sc_relief = bass_sc_relief_pct * 0.01;
-low_coherence = low_coherence_pct * 0.01;
-low_release_stab = low_release_stab_pct * 0.01;
-transition_fill = transition_fill_pct * 0.01;
-low_bass_floor = low_bass_floor_pct * 0.01;
-adaptive_bass_coupling = adaptive_bass_coupling_pct * 0.01;
-bass_clip = bass_clip_pct * 0.01;
-bass_clip_density = bass_clip_density_pct * 0.01;
-
-prelimit_mix = pre_limiter_pct * 0.01;
-clip_restraint = clip_restraint_pct * 0.01;
-
-peak_only_final_limiter = (clipper_style == 0 && pre_limiter_pct >= 99 && clip_restraint_pct >= 99 && smooth_drive_rounder_pct <= 0.001 && post_agc_smooth_drive_pct <= 0.001 && post_xt2_smooth_drive_pct <= 0.001 && abs(pre_final_drive_db) <= 0.001 && top_filter_mode == 0 && output_trim_db == 0 && final_threshold_db >= -0.001 && final_threshold_db <= 0.001);
-prelimit_thresh = peak_only_final_limiter ? ceiling : ceiling * 0.985;
-fcs_thresh_setting = peak_only_final_limiter ? ceiling : ceiling * 0.985;
-
-agc_env_attack = exp(-1/(srate * 0.045));
-agc_gain_attack = exp(-1/(srate * 0.030));
-
-agc_env_attack_fast = exp(-1/(srate * 0.009));
-agc_gain_attack_fast = exp(-1/(srate * 0.014));
-agc_assist_attack = exp(-1/(srate * 0.003));
-agc_assist_release = exp(-1/(srate * 0.140));
-
-agc_surge_catch_attack = exp(-1/(srate * 0.0012));
-agc_surge_catch_release = exp(-1/(srate * 0.040));
-
-agc_makeup_guard_attack = exp(-1/(srate * 0.020));
-agc_makeup_guard_release = exp(-1/(srate * 0.650));
-agc_release = exp(-1/(srate * (0.080 + release_time * 0.085)));
-agc_release_slow = exp(-1/(srate * (0.240 + release_time * 0.150)));
-band_attack = exp(-1/(srate * 0.0012));
-upper_band_attack = exp(-1/(srate * 0.0024));
-upper_mid_band_attack = exp(-1/(srate * 0.0018));
-band_release = exp(-1/(srate * (0.035 + release_time * 0.035)));
-band_release_slow = exp(-1/(srate * (0.100 + release_time * 0.080)));
-
-low_band_release_base = exp(-1/(srate * (0.060 + release_time * 0.055)));
-low_band_release_slow2 = exp(-1/(srate * (0.180 + release_time * 0.100)));
-low_band_release = band_release * (1 - low_release_stab) + low_band_release_base * low_release_stab;
-low_band_release_slow = band_release_slow * (1 - low_release_stab) + low_band_release_slow2 * low_release_stab;
-clip_attack = exp(-1/(srate * 0.0008));
-clip_release = exp(-1/(srate * 0.045));
-final_threshold_smooth = exp(-1/(srate * 0.010));
-recomb_attack = exp(-1/(srate * 0.0007));
-recomb_release = exp(-1/(srate * (0.090 + release_time * 0.055)));
-startup_activity_release = exp(-1/(srate * 0.350));
-
-master_catch_attack = exp(-1/(srate * 0.010));
-master_catch_release = exp(-1/(srate * 0.150));
-master_env_attack = exp(-1/(srate * 0.006));
-master_env_release = exp(-1/(srate * 0.320));
-
-gate_detector_release = exp(-1/(srate * 0.160));
-gate_close_sec = 0.040 + release_time * 0.012;
-gate_close_coeff = exp(-1/(srate * gate_close_sec));
-gate_open_coeff = exp(-1/(srate * 0.0015));
-gate_agc_freeze_release = exp(-1/(srate * 8.0));
-gate_xt2_freeze_release = exp(-1/(srate * 2.5));
-gate_reopen_release = exp(-1/(srate * gate_reopen_speed_sec));
-gate_reopen_env_release = exp(-1/(srate * max(gate_reopen_speed_sec * 0.85, 0.005)));
-gate_reopen_decay = exp(-1/(srate * max(gate_reopen_speed_sec * 4.5, 0.120)));
-
-gate_reopen_pulse_scale = 0.20 + 0.95 * gate_reopen_strength;
-
-gate_agc_drift_target = db2lin(-10);
-gate_agc_drift_coeff = exp(-1/(srate * 4.5));
-
-upper_snub_fast_a = 1 - exp(-1/(srate * 0.00055));
-upper_snub_slow_a = 1 - exp(-1/(srate * 0.018));
-upper_snub_delta_a = 1 - exp(-1/(srate * 0.0030));
-upper_snub_curve_a = 1 - exp(-1/(srate * 0.0022));
-upper_snub_gain_attack = exp(-1/(srate * 0.00010));
-upper_snub_gain_release = exp(-1/(srate * 0.0028));
-
-hpf30_a = 1 - exp(-2*$pi*20/srate);
-agc_split_a = 1 - exp(-2*$pi*200/srate);
-
-x1_a = 1 - exp(-2*$pi*150/srate);
-x2_a = 1 - exp(-2*$pi*420/srate);
-x3_a = 1 - exp(-2*$pi*700/srate);
-x4_a = 1 - exp(-2*$pi*1600/srate);
-x5_a = 1 - exp(-2*$pi*3700/srate);
-
-lr4b1a_l.biquad_lp_set(150, 0.7071);  lr4b1a_r.biquad_lp_set(150, 0.7071);
-lr4b1b_l.biquad_lp_set(150, 0.7071);  lr4b1b_r.biquad_lp_set(150, 0.7071);
-lr4b2a_l.biquad_lp_set(420, 0.7071);  lr4b2a_r.biquad_lp_set(420, 0.7071);
-lr4b2b_l.biquad_lp_set(420, 0.7071);  lr4b2b_r.biquad_lp_set(420, 0.7071);
-lr4b3a_l.biquad_lp_set(700, 0.7071);  lr4b3a_r.biquad_lp_set(700, 0.7071);
-lr4b3b_l.biquad_lp_set(700, 0.7071);  lr4b3b_r.biquad_lp_set(700, 0.7071);
-lr4b4a_l.biquad_lp_set(1600, 0.7071); lr4b4a_r.biquad_lp_set(1600, 0.7071);
-lr4b4b_l.biquad_lp_set(1600, 0.7071); lr4b4b_r.biquad_lp_set(1600, 0.7071);
-lr4b5a_l.biquad_lp_set(3700, 0.7071); lr4b5a_r.biquad_lp_set(3700, 0.7071);
-lr4b5b_l.biquad_lp_set(3700, 0.7071); lr4b5b_r.biquad_lp_set(3700, 0.7071);
-
-dist_cancel_a = 1 - exp(-2*$pi*2200/srate);
-
-ap1_c = ap_coeff(phase_f1);
-ap2_c = ap_coeff(phase_f2);
-ap3_c = ap_coeff(phase_f3);
-ap4_c = ap_coeff(phase_f4);
-ap5_c = ap_coeff(phase_f5);
-ap6_c = ap_coeff(phase_f6);
-ap7_c = ap_coeff(phase_f7);
-ap8_c = ap_coeff(phase_f8);
-ap9_c = ap_coeff(phase_f9);
-ap10_c = ap_coeff(phase_f10);
-ap11_c = ap_coeff(phase_f11);
-ap12_c = ap_coeff(phase_f12);
-
-agc_target = db2lin(-17);
-agc_max_gain = db2lin(9);
-agc_min_gain = db2lin(-14);
-gate_lin = db2lin(gate_threshold_db);
-
-b1_thresh = db2lin(-9.5);
-b2_thresh = db2lin(-11.5);
-b3_thresh = db2lin(-13.0);
-b4_thresh = db2lin(-14.5);
-b5_thresh = db2lin(-16.5);
-b6_thresh = db2lin(-18.0);
-
-const_db2lin_minus28 = db2lin(-28);
-const_db2lin_minus18 = db2lin(-18);
-const_db2lin_minus6 = db2lin(-6);
-const_db2lin_minus6_2 = db2lin(-6.2);
-const_db2lin_minus3_6 = db2lin(-3.6);
-
-clip_ref = ceiling * 0.985;
-mb_ref = ceiling * 0.985;
-mb_work_ref = mb_ref / max(clip_drive_mb * density_clip_drive, 0.25);
-
-b1_det_sc_gain = density_detector_gain * db2lin(-bass_eq_work_db * 0.55 * bass_sc_relief - 1.00 * low_bass_floor);
-b2_det_sc_gain = density_detector_gain * db2lin(-bass_eq_work_db * 0.35 * bass_sc_relief - 0.45 * low_bass_floor);
-
-adapt_bass_split_a = 1 - exp(-2*$pi*190/srate);
-adapt_bass_det_attack = exp(-1/(srate * 0.420));
-adapt_bass_det_release = exp(-1/(srate * 3.200));
-adapt_bass_gain_up = exp(-1/(srate * 1.150));
-adapt_bass_gain_down = exp(-1/(srate * 0.130));
-adapt_bass_target_low = 0.33;
-adapt_bass_target_high = 0.52;
-adapt_bass_max_boost_db = 12.0 * adaptive_bass_coupling;
-adapt_bass_max_cut_db = 7.0 * adaptive_bass_coupling;
-
-adapt_top_det_attack = exp(-1/(srate * 0.360));
-adapt_top_det_release = exp(-1/(srate * 2.800));
-adapt_top_gain_up = exp(-1/(srate * 1.050));
-adapt_top_gain_down = exp(-1/(srate * 0.300));
-adapt_top_edge_target_low = 0.17;
-adapt_top_edge_target_high = 0.40;
-adapt_top_air_target_low = 0.030;
-adapt_top_air_target_high = 0.145;
-adapt_top_presence_max_boost_db = 1.8 * adaptive_top_coupling;
-adapt_top_presence_max_cut_db = 3.8 * adaptive_top_coupling;
-adapt_top_air_max_boost_db = 3.6 * adaptive_top_coupling;
-adapt_top_air_max_cut_db = 1.1 * adaptive_top_coupling;
-adapt_top_air_hp_a = 1 - exp(-2*$pi*6800/srate);
-
-bass_clip_lo_a = 1 - exp(-2*$pi*300/srate);
-bass_clip_hi_a = 1 - exp(-2*$pi*650/srate);
-
-bass_clip_split_a = 1 - exp(-2*$pi*145/srate);
-bass_clip_subhp_a = 1 - exp(-2*$pi*28/srate);
-bass_clip_pre_res_a = 1 - exp(-2*$pi*220/srate);
-bass_clip_pre_th = ceiling * (0.20 - 0.10 * bass_clip);
-bass_clip_pre_drive = 1.00 + 4.20 * bass_clip;
-bass_clip_pre_amt = min(1, bass_clip * (0.95 + 0.15 * bass_clip));
-bass_clip_makeup = 1.00 + 0.08 * bass_clip + 0.55 * bass_clip * bass_clip_density;
-
-recomb_clip_thresh = ceiling * (0.97 - 0.16 * recomb_control);
-recomb_clip_knee = 0.68 - 0.18 * recomb_control;
-clipper_style == 0 ? (
-  clip_stage1 = clip_ref * 0.96; clip_knee1 = 0.55;
-  clip_stage2 = clip_ref * 0.998; clip_knee2 = 0.35;
-) : clipper_style == 1 ? (
-  clip_stage1 = clip_ref * 0.92; clip_knee1 = 0.46;
-  clip_stage2 = clip_ref * 0.990; clip_knee2 = 0.30;
-) : clipper_style == 2 ? (
-  clip_stage1 = clip_ref * 0.88; clip_knee1 = 0.38;
-  clip_stage2 = clip_ref * 0.975; clip_knee2 = 0.24;
-) : (
-  clip_stage1 = clip_ref * 0.80; clip_knee1 = 0.26;
-  clip_stage2 = clip_ref * 0.950; clip_knee2 = 0.18;
-);
-
-side_scale = stereo_width_pct * 0.01;
-
-bass_peak_l.biquad_peak_set(65, 1.4, bass_eq_work_db);
-bass_peak_r.biquad_peak_set(65, 1.4, bass_eq_work_db);
-
-transition_peak_gain_db = transition_fill * 1.6;
-transition_peak_l.biquad_peak_set(105, 1.0, transition_peak_gain_db);
-transition_peak_r.biquad_peak_set(105, 1.0, transition_peak_gain_db);
-
-low_floor_gain_db = low_bass_floor * 0.65;
-low_floor_l.biquad_peak_set(58, 0.75, low_floor_gain_db);
-low_floor_r.biquad_peak_set(58, 0.75, low_floor_gain_db);
-
-top_filter_mode == 1 ? (
-  lpf15_1_l.biquad_lp_set(17000, 0.55);
-  lpf15_1_r.biquad_lp_set(17000, 0.55);
-  lpf15_2_l.biquad_lp_set(21000, 0.50);
-  lpf15_2_r.biquad_lp_set(21000, 0.50);
-) : top_filter_mode == 2 ? (
-  lpf15_1_l.biquad_lp_set(15500, 0.58);
-  lpf15_1_r.biquad_lp_set(15500, 0.58);
-  lpf15_2_l.biquad_lp_set(15500, 0.58);
-  lpf15_2_r.biquad_lp_set(15500, 0.58);
-) : (
-  lpf15_1_l.biquad_lp_set(14500, 0.50);
-  lpf15_1_r.biquad_lp_set(14500, 0.50);
-  lpf15_2_l.biquad_lp_set(14500, 0.50);
-  lpf15_2_r.biquad_lp_set(14500, 0.50);
-);
-
-fcs_residue_a = 1 - exp(-2*$pi*12000/srate);
-
-core_initial_apply ? (
+(core_initial_apply || core_state_reset) ? (
+  reset_meter_state();
   reset_dynamic_state();
-  core_initial_apply = 0;
+  hybrid_limiter_active_count=0;
+  hybrid_limiter_window_tracked=0;
+  core_initial_apply=0;
+  core_state_reset=0;
 );
+
+adaptive_bass_foundation_guard_active != adaptive_bass_foundation_guard_active_last ? (
+
+  adapt_bass_model_primed = 0;
+  adapt_bass_model_age_samples = 0;
+  adapt_bass_model_deep_env.e = 0;
+  adapt_bass_model_useful_env.e = 0;
+  adapt_bass_model_mid_env.e = 0;
+  adapt_bass_model_slow_deep_env.e = 0;
+  adapt_bass_model_slow_useful_env.e = 0;
+  adapt_bass_model_slow_mid_env.e = 0;
+  adapt_bass_model_fast_deep_boost_evidence_db = 0;
+  adapt_bass_model_fast_useful_boost_evidence_db = 0;
+  adapt_bass_model_fast_deep_cut_evidence_db = 0;
+  adapt_bass_model_fast_useful_cut_evidence_db = 0;
+  adapt_bass_model_deep_boost_state_db = 0;
+  adapt_bass_model_useful_boost_state_db = 0;
+  adapt_bass_model_deep_cut_state_db = 0;
+  adapt_bass_model_useful_cut_state_db = 0;
+  adapt_bass_model_deep_target_cached = 1;
+  adapt_bass_model_useful_target_cached = 1;
+  adapt_bass_model_deep_target_db_cached = 0;
+  adapt_bass_model_useful_target_db_cached = 0;
+  adapt_bass_model_voice_gain = 1;
+  adapt_bass_model_voice_target_cached = 1;
+  adapt_bass_model_70_l.x1 = 0; adapt_bass_model_70_l.x2 = 0; adapt_bass_model_70_l.y1 = 0; adapt_bass_model_70_l.y2 = 0;
+  adapt_bass_model_70_r.x1 = 0; adapt_bass_model_70_r.x2 = 0; adapt_bass_model_70_r.y1 = 0; adapt_bass_model_70_r.y2 = 0;
+  adapt_bass_model_250_l.x1 = 0; adapt_bass_model_250_l.x2 = 0; adapt_bass_model_250_l.y1 = 0; adapt_bass_model_250_l.y2 = 0;
+  adapt_bass_model_250_r.x1 = 0; adapt_bass_model_250_r.x2 = 0; adapt_bass_model_250_r.y1 = 0; adapt_bass_model_250_r.y2 = 0;
+  adapt_bass_model_420_l.x1 = 0; adapt_bass_model_420_l.x2 = 0; adapt_bass_model_420_l.y1 = 0; adapt_bass_model_420_l.y2 = 0;
+  adapt_bass_model_420_r.x1 = 0; adapt_bass_model_420_r.x2 = 0; adapt_bass_model_420_r.y1 = 0; adapt_bass_model_420_r.y2 = 0;
+  adapt_bass_model_3700_l.x1 = 0; adapt_bass_model_3700_l.x2 = 0; adapt_bass_model_3700_l.y1 = 0; adapt_bass_model_3700_l.y2 = 0;
+  adapt_bass_model_3700_r.x1 = 0; adapt_bass_model_3700_r.x2 = 0; adapt_bass_model_3700_r.y1 = 0; adapt_bass_model_3700_r.y2 = 0;
+  adapt_bass_actuator_shelf_l.x1 = 0; adapt_bass_actuator_shelf_l.x2 = 0; adapt_bass_actuator_shelf_l.y1 = 0; adapt_bass_actuator_shelf_l.y2 = 0;
+  adapt_bass_actuator_shelf_r.x1 = 0; adapt_bass_actuator_shelf_r.x2 = 0; adapt_bass_actuator_shelf_r.y1 = 0; adapt_bass_actuator_shelf_r.y2 = 0;
+  adapt_bass_actuator_body_l.x1 = 0; adapt_bass_actuator_body_l.x2 = 0; adapt_bass_actuator_body_l.y1 = 0; adapt_bass_actuator_body_l.y2 = 0;
+  adapt_bass_actuator_body_r.x1 = 0; adapt_bass_actuator_body_r.x2 = 0; adapt_bass_actuator_body_r.y1 = 0; adapt_bass_actuator_body_r.y2 = 0;
+  adapt_bass_actuator_coeff_count = 63;
+  adapt_bass_actuator_shelf_l.a0 = 1; adapt_bass_actuator_shelf_l.a1 = 0; adapt_bass_actuator_shelf_l.a2 = 0; adapt_bass_actuator_shelf_l.b1 = 0; adapt_bass_actuator_shelf_l.b2 = 0;
+  adapt_bass_actuator_shelf_r.a0 = 1; adapt_bass_actuator_shelf_r.a1 = 0; adapt_bass_actuator_shelf_r.a2 = 0; adapt_bass_actuator_shelf_r.b1 = 0; adapt_bass_actuator_shelf_r.b2 = 0;
+  adapt_bass_actuator_body_l.a0 = 1; adapt_bass_actuator_body_l.a1 = 0; adapt_bass_actuator_body_l.a2 = 0; adapt_bass_actuator_body_l.b1 = 0; adapt_bass_actuator_body_l.b2 = 0;
+  adapt_bass_actuator_body_r.a0 = 1; adapt_bass_actuator_body_r.a1 = 0; adapt_bass_actuator_body_r.a2 = 0; adapt_bass_actuator_body_r.b1 = 0; adapt_bass_actuator_body_r.b2 = 0;
+  adaptive_bass_foundation_guard_active_last = adaptive_bass_foundation_guard_active;
+);
+
+(fm_preemph_mode != fm_preemph_mode_last || stereo_section_mode != stereo_section_mode_last) ? (
+  pre_l.x1 = 0; pre_l.primed = 0;
+  pre_r.x1 = 0; pre_r.primed = 0;
+  deemph_l.x1 = 0; deemph_l.primed = 0;
+  deemph_r.x1 = 0; deemph_r.primed = 0;
+);
+
+(stereo_mode != stereo_mode_last || stereo_width_pct != stereo_width_pct_last || stereo_section_mode != stereo_section_mode_last) ? (
+  adaptive_width.mid_fast = 0;
+  adaptive_width.mid_slow = 0;
+  adaptive_width.mid_env = 0;
+  adaptive_width.side_env = 0;
+  adaptive_width.gain = 0;
+  meter_blk_width_added_max = 1;
+);
+
+fm_preemph_mode_last = fm_preemph_mode;
+stereo_mode_last = stereo_mode;
+stereo_width_pct_last = stereo_width_pct;
+stereo_section_mode_last = stereo_section_mode;
 
 @block
-pdc_delay != path_delay ? pdc_delay = path_delay;
+
+block_srate_safe = (srate >= 8000 && srate <= 768000) ? srate : 48000;
+block_srate_safe != srate_safe ? (
+  srate_safe = block_srate_safe;
+  update_derived_params();
+  reset_dynamic_state();
+  reset_meter_state();
+);
+
+pdc_target_delay = path_delay + hybrid_total_spl;
+pdc_delay != pdc_target_delay ? pdc_delay = pdc_target_delay;
 pdc_bot_ch != 0 ? pdc_bot_ch = 0;
 pdc_top_ch != 2 ? pdc_top_ch = 2;
 
 @sample
-core_state_reset ? (
+preset_state_reset ? (
   reset_dynamic_state();
-  core_state_reset = 0;
+  preset_state_reset = 0;
 );
 
+meter_cpu_count += 1;
+meter_cpu_count >= 64 ? (
+  meter_heavy_tick = 1;
+  meter_cpu_count = 0;
+) : (
+  meter_heavy_tick = 0;
+);
+
+shape_rec_count += 1;
+shape_rec_count >= shape_rec_block_size ? (
+  shape_rec_heavy_tick = 1;
+  shape_rec_count = 0;
+) : (
+  shape_rec_heavy_tick = 0;
+);
+
+adaptive_cpu_count += 1;
+adaptive_cpu_count >= 16 ? (
+  adaptive_cpu_tick = 1;
+  adaptive_cpu_count = 0;
+) : (
+  adaptive_cpu_tick = 0;
+);
+
+diag_active = 0;
+diag_l = 0;
+diag_r = 0;
 
 spl0 = abs(spl0) < 1000000000000 ? spl0 : 0;
 spl1 = abs(spl1) < 1000000000000 ? spl1 : 0;
 input_section_in_l = spl0;
 input_section_in_r = spl1;
 
-l_in = input_section_in_l * input_gain;
+input_section_mode == 3 ? (
+  l = input_section_in_l;
+  r = input_section_in_r;
+) : (
+  l_in = input_section_in_l * input_gain;
   r_in = input_section_in_r * input_gain;
 
-  subsonic_hpf ? (
+  core_mode == 1 ? (
+    hpl = hp30_l.onepole_hp(l_in, hpf30_a);
+    hpr = hp30_r.onepole_hp(r_in, hpf30_a);
+    l = l_in + (hpl-l_in)*stream_hpf_mix;
+    r = r_in + (hpr-r_in)*stream_hpf_mix;
+  ) : subsonic_hpf ? (
     l = hp30_l.onepole_hp(l_in, hpf30_a);
     r = hp30_r.onepole_hp(r_in, hpf30_a);
   ) : (
@@ -1109,14 +1897,22 @@ l_in = input_section_in_l * input_gain;
     l = l_rot;
     r = r_rot;
   );
+);
 
 input_section_proc_l = l;
 input_section_proc_r = r;
+input_section_mode == 1 ? (
+  diag_l = input_section_proc_l;
+  diag_r = input_section_proc_r;
+  diag_active = 1;
+) : input_section_mode == 2 ? (
+  diag_l = input_section_proc_l - input_section_in_l;
+  diag_r = input_section_proc_r - input_section_in_r;
+  diag_active = 1;
+);
 
 agc_section_in_l = l;
 agc_section_in_r = r;
-
-startup_activity = max(absmax2(l, r), startup_activity * startup_activity_release);
 
 agc_l = l * agc_drive;
 agc_r = r * agc_drive;
@@ -1180,8 +1976,8 @@ gate_effective > 0 ? (
   high_tgain = high_tgain * (1 - gate_effective) + gated_high_tgain * gate_effective;
 );
 
-agc_low_depth = clamp((1 - agc_lgain) / 0.75, 0, 1);
-agc_high_depth = clamp((1 - agc_hgain) / 0.75, 0, 1);
+agc_low_depth = clamp((1 - agc_lgain) * 1.3333333333333333, 0, 1);
+agc_high_depth = clamp((1 - agc_hgain) * 1.3333333333333333, 0, 1);
 
 pd_agc = pd_release * 0.15;
 agc_low_rel = agc_release * (1 - pd_agc * agc_low_depth) + agc_release_slow * (pd_agc * agc_low_depth);
@@ -1202,11 +1998,10 @@ gate_agc_drift_amt = (1 - gate_agc_drift_coeff) * gate_effective;
 agc_lgain += gate_agc_drift_amt * (gate_agc_drift_target - agc_lgain);
 agc_hgain += gate_agc_drift_amt * (gate_agc_drift_target - agc_hgain);
 
-agc_drive_safe = max(agc_drive, 0.000001);
-agc_low_raw_l = low_l / agc_drive_safe;
-agc_low_raw_r = low_r / agc_drive_safe;
-agc_high_raw_l = high_l / agc_drive_safe;
-agc_high_raw_r = high_r / agc_drive_safe;
+agc_low_raw_l = low_l * inv_agc_drive_safe;
+agc_low_raw_r = low_r * inv_agc_drive_safe;
+agc_high_raw_l = high_l * inv_agc_drive_safe;
+agc_high_raw_r = high_r * inv_agc_drive_safe;
 
 agc_low_proc_gain = agc_drive * agc_lgain;
 agc_high_proc_gain = agc_drive * agc_hgain;
@@ -1221,13 +2016,28 @@ agc_out_r = agc_low_raw_r * agc_low_eff_gain + agc_high_raw_r * agc_high_eff_gai
 l = agc_out_l;
 r = agc_out_r;
 
-post_agc_smooth_drive_amt > 0.0000001 ? (
+agc_section_mode == 3 ? (
+  l = agc_section_in_l;
+  r = agc_section_in_r;
+) : (
+
+  post_agc_smooth_drive_amt > 0.0000001 ? (
     l = post_agc_round_l.smooth_drive_rounder(l, post_agc_smooth_drive_amt) * post_agc_smooth_recovery_gain;
     r = post_agc_round_r.smooth_drive_rounder(r, post_agc_smooth_drive_amt) * post_agc_smooth_recovery_gain;
   );
+);
 
 agc_section_proc_l = l;
 agc_section_proc_r = r;
+agc_section_mode == 1 ? (
+  diag_l = agc_section_proc_l;
+  diag_r = agc_section_proc_r;
+  diag_active = 1;
+) : agc_section_mode == 2 ? (
+  diag_l = agc_section_proc_l - agc_section_in_l;
+  diag_r = agc_section_proc_r - agc_section_in_r;
+  diag_active = 1;
+);
 
 mastering_lookahead_samps > 0 ? (
   master_side_det = absmax2(l, r);
@@ -1260,7 +2070,7 @@ mastering_lookahead_samps > 0 ? (
   master_raw_level = master_raw_env.peak_env(master_raw_det, master_env_attack, master_env_release);
   master_amp_level = master_amp_env.peak_env(master_amp_det, master_env_attack, master_env_release);
   master_net_makeup_db = lin2db(master_amp_level / max(master_raw_level, 0.000001));
-  master_allow = clamp((master_net_makeup_db - 3.0) / 9.0, 0, 1);
+  master_allow = clamp((master_net_makeup_db - 3.0) * 0.11111111111111111, 0, 1);
 
   master_catch_thresh = const_db2lin_minus6_2;
   master_catch_det = master_catch_env.peak_env(master_side_det, master_catch_attack, master_catch_release);
@@ -1292,37 +2102,265 @@ mastering_lookahead_samps > 0 ? (
 
 bass_section_in_l = l;
 bass_section_in_r = r;
-l = bass_peak_l.biquad_run(l);
-r = bass_peak_r.biquad_run(r);
+bass_pre_eq_l = l;
+bass_pre_eq_r = r;
+bass_boosted_l = bass_peak_l.biquad_run(l);
+bass_boosted_r = bass_peak_r.biquad_run(r);
 
-adaptive_bass_coupling > 0 ? (
-  ab_low_l = adapt_bass_lp_l.onepole_lp2(l, adapt_bass_split_a);
-  ab_low_r = adapt_bass_lp_r.onepole_lp2(r, adapt_bass_split_a);
-  ab_high_l = l - ab_low_l;
-  ab_high_r = r - ab_low_r;
-
-  ab_bass_det = absmax2(ab_low_l, ab_low_r);
-  ab_prog_det = max(absmax2(l, r), absmax2(ab_high_l, ab_high_r) * 1.20);
-
-  ab_bass_env = adapt_bass_env.peak_env(ab_bass_det, adapt_bass_det_attack, adapt_bass_det_release);
-  ab_prog_env = adapt_prog_env.peak_env(ab_prog_det, adapt_bass_det_attack, adapt_bass_det_release);
-  ab_ratio = ab_bass_env / max(ab_prog_env, 0.000001);
-
-  ab_thin = clamp((adapt_bass_target_low - ab_ratio) / max(adapt_bass_target_low - 0.105, 0.000001), 0, 1);
-  ab_heavy = clamp((ab_ratio - adapt_bass_target_high) / max(0.82 - adapt_bass_target_high, 0.000001), 0, 1);
-  ab_gain_target_db = adapt_bass_max_boost_db * ab_thin - adapt_bass_max_cut_db * ab_heavy;
-  ab_gain_target = db2lin(ab_gain_target_db);
-
-  adapt_bass_gain <= 0 ? adapt_bass_gain = 1;
-  ab_gain_target < adapt_bass_gain ? (
-    adapt_bass_gain = ab_gain_target + adapt_bass_gain_down * (adapt_bass_gain - ab_gain_target);
+legacy_bass_l = bass_boosted_l;
+legacy_bass_r = bass_boosted_r;
+stream_foundation_mix < 0.9999999 && adaptive_bass_coupling > 0 ? (
+  legacy_ab_low_l = legacy_adapt_bass_lp_l.onepole_lp2(bass_boosted_l, legacy_adapt_bass_split_a);
+  legacy_ab_low_r = legacy_adapt_bass_lp_r.onepole_lp2(bass_boosted_r, legacy_adapt_bass_split_a);
+  legacy_ab_high_l = bass_boosted_l - legacy_ab_low_l;
+  legacy_ab_high_r = bass_boosted_r - legacy_ab_low_r;
+  legacy_ab_bass_det = absmax2(legacy_ab_low_l, legacy_ab_low_r);
+  legacy_ab_prog_det = max(absmax2(bass_boosted_l, bass_boosted_r), absmax2(legacy_ab_high_l, legacy_ab_high_r)*1.20);
+  legacy_ab_bass_level = legacy_adapt_bass_env.peak_env(legacy_ab_bass_det, legacy_adapt_bass_det_attack, legacy_adapt_bass_det_release);
+  legacy_ab_prog_level = legacy_adapt_prog_env.peak_env(legacy_ab_prog_det, legacy_adapt_bass_det_attack, legacy_adapt_bass_det_release);
+  legacy_ab_ratio = legacy_ab_bass_level/max(legacy_ab_prog_level,0.000001);
+  legacy_ab_thin = clamp((legacy_adapt_bass_target_low-legacy_ab_ratio)/max(legacy_adapt_bass_target_low-0.105,0.000001),0,1);
+  legacy_ab_heavy = clamp((legacy_ab_ratio-legacy_adapt_bass_target_high)/max(0.82-legacy_adapt_bass_target_high,0.000001),0,1);
+  legacy_ab_gain_target_db = legacy_adapt_bass_max_boost_db*legacy_ab_thin-legacy_adapt_bass_max_cut_db*legacy_ab_heavy;
+  legacy_ab_gain_target = db2lin(legacy_ab_gain_target_db);
+  legacy_adapt_bass_gain <= 0 ? legacy_adapt_bass_gain = 1;
+  legacy_ab_gain_target < legacy_adapt_bass_gain ? (
+    legacy_adapt_bass_gain = legacy_ab_gain_target + legacy_adapt_bass_gain_down*(legacy_adapt_bass_gain-legacy_ab_gain_target);
   ) : (
-    adapt_bass_gain = ab_gain_target + adapt_bass_gain_up * (adapt_bass_gain - ab_gain_target);
+    legacy_adapt_bass_gain = legacy_ab_gain_target + legacy_adapt_bass_gain_up*(legacy_adapt_bass_gain-legacy_ab_gain_target);
+  );
+  legacy_bass_l = legacy_ab_high_l + legacy_ab_low_l*legacy_adapt_bass_gain;
+  legacy_bass_r = legacy_ab_high_r + legacy_ab_low_r*legacy_adapt_bass_gain;
+);
+
+foundation_bass_l = bass_boosted_l;
+foundation_bass_r = bass_boosted_r;
+adaptive_bass_foundation_guard_active ? (
+  abm_lp70_l = adapt_bass_model_70_l.biquad_run(bass_pre_eq_l);
+  abm_lp70_r = adapt_bass_model_70_r.biquad_run(bass_pre_eq_r);
+  abm_lp250_l = adapt_bass_model_250_l.biquad_run(bass_pre_eq_l);
+  abm_lp250_r = adapt_bass_model_250_r.biquad_run(bass_pre_eq_r);
+  abm_lp420_l = adapt_bass_model_420_l.biquad_run(bass_pre_eq_l);
+  abm_lp420_r = adapt_bass_model_420_r.biquad_run(bass_pre_eq_r);
+  abm_lp3700_l = adapt_bass_model_3700_l.biquad_run(bass_pre_eq_l);
+  abm_lp3700_r = adapt_bass_model_3700_r.biquad_run(bass_pre_eq_r);
+
+  abm_deep_l = abm_lp70_l;
+  abm_deep_r = abm_lp70_r;
+  abm_useful_l = abm_lp250_l - abm_lp70_l;
+  abm_useful_r = abm_lp250_r - abm_lp70_r;
+  abm_mid_l = abm_lp3700_l - abm_lp420_l;
+  abm_mid_r = abm_lp3700_r - abm_lp420_r;
+
+  abm_deep_power = (abm_deep_l * abm_deep_l + abm_deep_r * abm_deep_r) * 0.5;
+  abm_useful_power = (abm_useful_l * abm_useful_l + abm_useful_r * abm_useful_r) * 0.5;
+  abm_mid_power = (abm_mid_l * abm_mid_l + abm_mid_r * abm_mid_r) * 0.5;
+  abm_program_det = max(absmax2(bass_pre_eq_l, bass_pre_eq_r),
+                        max(absmax2(abm_deep_l, abm_deep_r),
+                            max(absmax2(abm_useful_l, abm_useful_r), absmax2(abm_mid_l, abm_mid_r))));
+
+  abm_program_det >= 0.00003 ? adapt_bass_model_age_samples += 1;
+  adapt_bass_model_primed <= 0 && abm_program_det > 0.00001 ? (
+    adapt_bass_model_deep_env.e = abm_deep_power;
+    adapt_bass_model_useful_env.e = abm_useful_power;
+    adapt_bass_model_mid_env.e = abm_mid_power;
+    adapt_bass_model_slow_deep_env.e = abm_deep_power;
+    adapt_bass_model_slow_useful_env.e = abm_useful_power;
+    adapt_bass_model_slow_mid_env.e = abm_mid_power;
+    adapt_bass_model_primed = 1;
   );
 
-  l = ab_high_l + ab_low_l * adapt_bass_gain;
-  r = ab_high_r + ab_low_r * adapt_bass_gain;
+  abm_fast_deep_energy = adapt_bass_model_deep_env.peak_env(abm_deep_power, adapt_bass_model_det_attack, adapt_bass_model_det_release);
+  abm_fast_useful_energy = adapt_bass_model_useful_env.peak_env(abm_useful_power, adapt_bass_model_det_attack, adapt_bass_model_det_release);
+  abm_fast_mid_energy = adapt_bass_model_mid_env.peak_env(abm_mid_power, adapt_bass_model_det_attack, adapt_bass_model_det_release);
+  abm_slow_deep_energy = adapt_bass_model_slow_deep_env.peak_env(abm_deep_power, adapt_bass_model_slow_attack, adapt_bass_model_slow_release);
+  abm_slow_useful_energy = adapt_bass_model_slow_useful_env.peak_env(abm_useful_power, adapt_bass_model_slow_attack, adapt_bass_model_slow_release);
+  abm_slow_mid_energy = adapt_bass_model_slow_mid_env.peak_env(abm_mid_power, adapt_bass_model_slow_attack, adapt_bass_model_slow_release);
+
+  adaptive_cpu_tick ? (
+    abm_valid_program = abm_fast_mid_energy > 0.000000000001 && abm_program_det >= 0.00003;
+    abm_valid_program ? (
+      abm_fast_deep_ratio_db = lin2db(sqrt(max(abm_fast_deep_energy, 0.000000000001) / max(abm_fast_mid_energy, 0.000000000001)));
+      abm_fast_useful_ratio_db = lin2db(sqrt(max(abm_fast_useful_energy, 0.000000000001) / max(abm_fast_mid_energy, 0.000000000001)));
+      abm_slow_deep_ratio_db = lin2db(sqrt(max(abm_slow_deep_energy, 0.000000000001) / max(abm_slow_mid_energy, 0.000000000001)));
+      abm_slow_useful_ratio_db = lin2db(sqrt(max(abm_slow_useful_energy, 0.000000000001) / max(abm_slow_mid_energy, 0.000000000001)));
+
+      abm_fast_deep_boost_1 = smoothstep01((-6.2 - abm_fast_deep_ratio_db) / 2.8);
+      abm_fast_deep_boost_2 = smoothstep01((-9.0 - abm_fast_deep_ratio_db) / 7.0);
+      abm_fast_deep_boost_3 = smoothstep01((-16.0 - abm_fast_deep_ratio_db) / 8.0);
+      abm_fast_deep_boost_db = (4.0 * abm_fast_deep_boost_1 + 3.0 * abm_fast_deep_boost_2 + 0.7 * abm_fast_deep_boost_3) * adapt_bass_boost_scale;
+      abm_slow_deep_boost_1 = smoothstep01((-6.2 - abm_slow_deep_ratio_db) / 2.8);
+      abm_slow_deep_boost_2 = smoothstep01((-9.0 - abm_slow_deep_ratio_db) / 7.0);
+      abm_slow_deep_boost_3 = smoothstep01((-16.0 - abm_slow_deep_ratio_db) / 8.0);
+      abm_slow_deep_boost_db = (4.0 * abm_slow_deep_boost_1 + 3.0 * abm_slow_deep_boost_2 + 0.7 * abm_slow_deep_boost_3) * adapt_bass_boost_scale;
+
+      abm_fast_deep_support = smoothstep01((-5.8 - abm_fast_deep_ratio_db) / 2.5);
+      abm_fast_useful_boost_1 = smoothstep01((-0.35 - abm_fast_useful_ratio_db) / 1.65);
+      abm_fast_useful_boost_2 = smoothstep01((-2.0 - abm_fast_useful_ratio_db) / 4.0);
+      abm_fast_useful_boost_3 = smoothstep01((-6.0 - abm_fast_useful_ratio_db) / 4.5);
+      abm_fast_useful_boost_db = (3.5 * abm_fast_useful_boost_1 + 2.7 * abm_fast_useful_boost_2 + 1.5 * abm_fast_useful_boost_3) * abm_fast_deep_support * adapt_bass_boost_scale;
+      abm_slow_deep_support = smoothstep01((-5.8 - abm_slow_deep_ratio_db) / 2.5);
+      abm_slow_useful_boost_1 = smoothstep01((-0.35 - abm_slow_useful_ratio_db) / 1.65);
+      abm_slow_useful_boost_2 = smoothstep01((-2.0 - abm_slow_useful_ratio_db) / 4.0);
+      abm_slow_useful_boost_3 = smoothstep01((-6.0 - abm_slow_useful_ratio_db) / 4.5);
+      abm_slow_useful_boost_db = (3.5 * abm_slow_useful_boost_1 + 2.7 * abm_slow_useful_boost_2 + 1.5 * abm_slow_useful_boost_3) * abm_slow_deep_support * adapt_bass_boost_scale;
+
+      abm_slow_deep_cut_1 = smoothstep01((abm_slow_deep_ratio_db + 0.3) / 1.0);
+      abm_slow_deep_cut_2 = smoothstep01((abm_slow_deep_ratio_db - 0.7) / 2.3);
+      abm_slow_deep_cut_db = (4.5 * abm_slow_deep_cut_1 + 0.5 * abm_slow_deep_cut_2) * adapt_bass_cut_authority;
+      abm_slow_lean_pos = smoothstep01((-0.5 - abm_slow_deep_ratio_db) / 2.0);
+      abm_slow_useful_cut_start_db = 1.5 + 2.0 * abm_slow_lean_pos;
+      abm_slow_useful_abs_cut = smoothstep01((abm_slow_useful_ratio_db - abm_slow_useful_cut_start_db) / 1.5);
+      abm_slow_useful_shape_cut = smoothstep01((abm_slow_useful_ratio_db - abm_slow_deep_ratio_db - 0.6) / 1.5);
+      abm_slow_useful_cut_db = 4.5 * abm_slow_useful_abs_cut * (0.20 + 0.80 * abm_slow_useful_shape_cut) * adapt_bass_cut_authority;
+      abm_slow_broad_support = smoothstep01((abm_slow_deep_ratio_db + 3.0) / 2.5);
+      abm_slow_deep_cut_db = max(abm_slow_deep_cut_db, 0.90 * abm_slow_useful_cut_db * abm_slow_broad_support);
+
+      abm_cut_ready = adapt_bass_model_age_samples >= adapt_bass_model_cut_holdoff_samples;
+      abm_fast_deep_cut_db = abm_cut_ready ? 5.0 * smoothstep01((abm_fast_deep_ratio_db - 0.5) / 2.2) * adapt_bass_cut_authority : 0;
+      abm_fast_useful_cut_db = abm_cut_ready ? 4.5 * smoothstep01((abm_fast_useful_ratio_db - 3.2) / 1.6)
+                                            * smoothstep01((abm_fast_deep_ratio_db - 0.0) / 1.4)
+                                            * adapt_bass_cut_authority : 0;
+      abm_fast_deep_cut_db = max(abm_fast_deep_cut_db, 0.90 * abm_fast_useful_cut_db);
+    ) : (
+      abm_fast_deep_boost_db = 0;
+      abm_fast_useful_boost_db = 0;
+      abm_slow_deep_boost_db = 0;
+      abm_slow_useful_boost_db = 0;
+      abm_slow_deep_cut_db = 0;
+      abm_slow_useful_cut_db = 0;
+      abm_fast_deep_cut_db = 0;
+      abm_fast_useful_cut_db = 0;
+    );
+
+    abm_fast_deep_boost_db > adapt_bass_model_fast_deep_boost_evidence_db ?
+      adapt_bass_model_fast_deep_boost_evidence_db = abm_fast_deep_boost_db + adapt_bass_model_fast_boost_attack_tick * (adapt_bass_model_fast_deep_boost_evidence_db - abm_fast_deep_boost_db) :
+      adapt_bass_model_fast_deep_boost_evidence_db = abm_fast_deep_boost_db + adapt_bass_model_fast_boost_release_tick * (adapt_bass_model_fast_deep_boost_evidence_db - abm_fast_deep_boost_db);
+    abm_fast_useful_boost_db > adapt_bass_model_fast_useful_boost_evidence_db ?
+      adapt_bass_model_fast_useful_boost_evidence_db = abm_fast_useful_boost_db + adapt_bass_model_fast_boost_attack_tick * (adapt_bass_model_fast_useful_boost_evidence_db - abm_fast_useful_boost_db) :
+      adapt_bass_model_fast_useful_boost_evidence_db = abm_fast_useful_boost_db + adapt_bass_model_fast_boost_release_tick * (adapt_bass_model_fast_useful_boost_evidence_db - abm_fast_useful_boost_db);
+    abm_fast_deep_cut_db > adapt_bass_model_fast_deep_cut_evidence_db ?
+      adapt_bass_model_fast_deep_cut_evidence_db = abm_fast_deep_cut_db + adapt_bass_model_fast_cut_attack_tick * (adapt_bass_model_fast_deep_cut_evidence_db - abm_fast_deep_cut_db) :
+      adapt_bass_model_fast_deep_cut_evidence_db = abm_fast_deep_cut_db + adapt_bass_model_fast_cut_release_tick * (adapt_bass_model_fast_deep_cut_evidence_db - abm_fast_deep_cut_db);
+    abm_fast_useful_cut_db > adapt_bass_model_fast_useful_cut_evidence_db ?
+      adapt_bass_model_fast_useful_cut_evidence_db = abm_fast_useful_cut_db + adapt_bass_model_fast_cut_attack_tick * (adapt_bass_model_fast_useful_cut_evidence_db - abm_fast_useful_cut_db) :
+      adapt_bass_model_fast_useful_cut_evidence_db = abm_fast_useful_cut_db + adapt_bass_model_fast_cut_release_tick * (adapt_bass_model_fast_useful_cut_evidence_db - abm_fast_useful_cut_db);
+
+    abm_deep_boost_target_db = max(abm_slow_deep_boost_db, 0.70 * adapt_bass_model_fast_deep_boost_evidence_db);
+    abm_useful_boost_target_db = max(abm_slow_useful_boost_db, 0.70 * adapt_bass_model_fast_useful_boost_evidence_db);
+    abm_deep_cut_target_db = max(abm_slow_deep_cut_db, 0.95 * adapt_bass_model_fast_deep_cut_evidence_db);
+    abm_useful_cut_target_db = max(abm_slow_useful_cut_db, 0.95 * adapt_bass_model_fast_useful_cut_evidence_db);
+    abm_global_cut_target_db = max(abm_deep_cut_target_db, abm_useful_cut_target_db);
+
+    abm_deep_boost_target_db > adapt_bass_model_deep_boost_state_db ? (
+      adapt_bass_model_deep_boost_state_db = abm_deep_boost_target_db + adapt_bass_model_boost_attack_tick * (adapt_bass_model_deep_boost_state_db - abm_deep_boost_target_db);
+    ) : (
+      abm_boost_coeff = abm_global_cut_target_db > 0.60 ? adapt_bass_model_boost_suppress_tick : adapt_bass_model_boost_release_tick;
+      adapt_bass_model_deep_boost_state_db = abm_deep_boost_target_db + abm_boost_coeff * (adapt_bass_model_deep_boost_state_db - abm_deep_boost_target_db);
+    );
+    abm_useful_boost_target_db > adapt_bass_model_useful_boost_state_db ? (
+      adapt_bass_model_useful_boost_state_db = abm_useful_boost_target_db + adapt_bass_model_boost_attack_tick * (adapt_bass_model_useful_boost_state_db - abm_useful_boost_target_db);
+    ) : (
+      abm_boost_coeff = abm_global_cut_target_db > 0.60 ? adapt_bass_model_boost_suppress_tick : adapt_bass_model_boost_release_tick;
+      adapt_bass_model_useful_boost_state_db = abm_useful_boost_target_db + abm_boost_coeff * (adapt_bass_model_useful_boost_state_db - abm_useful_boost_target_db);
+    );
+
+    abm_deep_cut_target_db > adapt_bass_model_deep_cut_state_db ? (
+      adapt_bass_model_deep_cut_state_db = abm_deep_cut_target_db + adapt_bass_model_cut_attack_tick * (adapt_bass_model_deep_cut_state_db - abm_deep_cut_target_db);
+    ) : (
+      abm_cut_coeff = abm_deep_boost_target_db > 2.0 ? adapt_bass_model_cut_suppress_tick : adapt_bass_model_cut_release_tick;
+      adapt_bass_model_deep_cut_state_db = abm_deep_cut_target_db + abm_cut_coeff * (adapt_bass_model_deep_cut_state_db - abm_deep_cut_target_db);
+    );
+    abm_useful_cut_target_db > adapt_bass_model_useful_cut_state_db ? (
+      adapt_bass_model_useful_cut_state_db = abm_useful_cut_target_db + adapt_bass_model_cut_attack_tick * (adapt_bass_model_useful_cut_state_db - abm_useful_cut_target_db);
+    ) : (
+      abm_cut_coeff = abm_useful_boost_target_db > 2.0 ? adapt_bass_model_cut_suppress_tick : adapt_bass_model_cut_release_tick;
+      adapt_bass_model_useful_cut_state_db = abm_useful_cut_target_db + abm_cut_coeff * (adapt_bass_model_useful_cut_state_db - abm_useful_cut_target_db);
+    );
+
+    adapt_bass_model_deep_raw_db = adapt_bass_model_deep_boost_state_db - adapt_bass_model_deep_cut_state_db;
+    adapt_bass_model_useful_raw_db = adapt_bass_model_useful_boost_state_db - adapt_bass_model_useful_cut_state_db;
+
+    adapt_bass_model_deep_raw_db * adapt_bass_model_useful_raw_db >= 0 ? (
+      abs(adapt_bass_model_deep_raw_db) >= abs(adapt_bass_model_useful_raw_db) ? (
+        abm_deep_target_db = adapt_bass_model_deep_raw_db + (adapt_bass_model_useful_raw_db - adapt_bass_model_deep_raw_db) * (0.08 * adapt_bass_lab_link);
+        abm_useful_target_db = adapt_bass_model_useful_raw_db + (adapt_bass_model_deep_raw_db - adapt_bass_model_useful_raw_db) * (0.70 * adapt_bass_lab_link);
+      ) : (
+        abm_useful_target_db = adapt_bass_model_useful_raw_db + (adapt_bass_model_deep_raw_db - adapt_bass_model_useful_raw_db) * (0.08 * adapt_bass_lab_link);
+        abm_deep_target_db = adapt_bass_model_deep_raw_db + (adapt_bass_model_useful_raw_db - adapt_bass_model_deep_raw_db) * (0.70 * adapt_bass_lab_link);
+      );
+    ) : (
+      abm_shared_db = (adapt_bass_model_deep_raw_db + adapt_bass_model_useful_raw_db) * 0.5;
+      abm_deep_target_db = adapt_bass_model_deep_raw_db + (abm_shared_db - adapt_bass_model_deep_raw_db) * (0.10 * adapt_bass_lab_link);
+      abm_useful_target_db = adapt_bass_model_useful_raw_db + (abm_shared_db - adapt_bass_model_useful_raw_db) * (0.10 * adapt_bass_lab_link);
+    );
+
+    abm_withdraw_pos = smoothstep01(clamp(abm_global_cut_target_db / 3.5, 0, 1));
+    abm_voice_target = 1 - clamp(adapt_bass_withdraw_authority * abm_withdraw_pos, 0, 1);
+    adapt_bass_model_deep_target_cached = db2lin(abm_deep_target_db);
+    adapt_bass_model_useful_target_cached = db2lin(abm_useful_target_db);
+    adapt_bass_model_deep_target_db_cached = abm_deep_target_db;
+    adapt_bass_model_useful_target_db_cached = abm_useful_target_db;
+    adapt_bass_model_voice_target_cached = abm_voice_target;
+  );
+
+  adapt_bass_model_deep_gain = adapt_bass_model_deep_target_cached;
+  adapt_bass_model_useful_gain = adapt_bass_model_useful_target_cached;
+
+  adapt_bass_model_voice_target_cached < adapt_bass_model_voice_gain ? (
+    adapt_bass_model_voice_gain = adapt_bass_model_voice_target_cached
+                                + adapt_bass_model_voice_withdraw * (adapt_bass_model_voice_gain - adapt_bass_model_voice_target_cached);
+  ) : (
+    adapt_bass_model_voice_gain = adapt_bass_model_voice_target_cached
+                                + adapt_bass_model_voice_return * (adapt_bass_model_voice_gain - adapt_bass_model_voice_target_cached);
+  );
+
+  abm_voiced_l = bass_pre_eq_l + (bass_boosted_l - bass_pre_eq_l) * adapt_bass_model_voice_gain;
+  abm_voiced_r = bass_pre_eq_r + (bass_boosted_r - bass_pre_eq_r) * adapt_bass_model_voice_gain;
+
+  adapt_bass_actuator_coeff_count += 1;
+  adapt_bass_actuator_coeff_count >= 64 ? (
+    adapt_bass_actuator_coeff_count = 0;
+    abm_actuator_body_source_db = adapt_bass_model_useful_target_db_cached;
+    abm_actuator_body_source_db >= 0 ? (
+      abm_actuator_body_db = min(3.0, abm_actuator_body_source_db * 0.50);
+      abm_actuator_body_freq = 90;
+      abm_actuator_body_q = 1.10;
+    ) : (
+      abm_actuator_body_db = -min(4.5, max(0, -abm_actuator_body_source_db - 1.5) * 1.50);
+      abm_actuator_body_freq = 125;
+      abm_actuator_body_q = 0.85;
+    );
+
+    adapt_bass_actuator_shelf_l.biquad_low_shelf_set(70, 1.0, adapt_bass_model_deep_target_db_cached);
+    adapt_bass_actuator_shelf_r.a0 = adapt_bass_actuator_shelf_l.a0;
+    adapt_bass_actuator_shelf_r.a1 = adapt_bass_actuator_shelf_l.a1;
+    adapt_bass_actuator_shelf_r.a2 = adapt_bass_actuator_shelf_l.a2;
+    adapt_bass_actuator_shelf_r.b1 = adapt_bass_actuator_shelf_l.b1;
+    adapt_bass_actuator_shelf_r.b2 = adapt_bass_actuator_shelf_l.b2;
+
+    adapt_bass_actuator_body_l.biquad_peak_set(abm_actuator_body_freq, abm_actuator_body_q, abm_actuator_body_db);
+    adapt_bass_actuator_body_r.a0 = adapt_bass_actuator_body_l.a0;
+    adapt_bass_actuator_body_r.a1 = adapt_bass_actuator_body_l.a1;
+    adapt_bass_actuator_body_r.a2 = adapt_bass_actuator_body_l.a2;
+    adapt_bass_actuator_body_r.b1 = adapt_bass_actuator_body_l.b1;
+    adapt_bass_actuator_body_r.b2 = adapt_bass_actuator_body_l.b2;
+  );
+
+  abm_foundation_l = adapt_bass_actuator_shelf_l.biquad_run(abm_voiced_l);
+  abm_foundation_r = adapt_bass_actuator_shelf_r.biquad_run(abm_voiced_r);
+  foundation_bass_l = adapt_bass_actuator_body_l.biquad_run(abm_foundation_l);
+  foundation_bass_r = adapt_bass_actuator_body_r.biquad_run(abm_foundation_r);
+
+ ) : (
+
+  foundation_bass_l = bass_boosted_l;
+  foundation_bass_r = bass_boosted_r;
+
 );
+
+l = legacy_bass_l + (foundation_bass_l-legacy_bass_l)*stream_foundation_mix;
+r = legacy_bass_r + (foundation_bass_r-legacy_bass_r)*stream_foundation_mix;
 
 bass_clip > 0 ? (
   bc_low_l = bassclip_split_l.onepole_lp2(l, bass_clip_split_a);
@@ -1344,6 +2382,18 @@ bass_clip > 0 ? (
 
 bass_section_proc_l = l;
 bass_section_proc_r = r;
+bass_section_mode == 1 ? (
+  diag_l = bass_section_proc_l;
+  diag_r = bass_section_proc_r;
+  diag_active = 1;
+) : bass_section_mode == 2 ? (
+  diag_l = bass_section_proc_l - bass_section_in_l;
+  diag_r = bass_section_proc_r - bass_section_in_r;
+  diag_active = 1;
+) : bass_section_mode == 3 ? (
+  l = bass_section_in_l;
+  r = bass_section_in_r;
+);
 
 xt2_section_in_l = l;
 xt2_section_in_r = r;
@@ -1467,15 +2517,15 @@ adaptive_top_coupling > 0 ? (
   at_air_prog_env = adapt_top_air_prog_env.peak_env(at_prog_det, adapt_top_det_attack, adapt_top_det_release);
   at_air_ratio = at_air_env / max(at_air_prog_env, 0.000001);
 
-  at_edge_dull = clamp((adapt_top_edge_target_low - at_edge_ratio) / max(adapt_top_edge_target_low - 0.060, 0.000001), 0, 1);
-  at_edge_bright = clamp((at_edge_ratio - adapt_top_edge_target_high) / max(0.78 - adapt_top_edge_target_high, 0.000001), 0, 1);
+  at_edge_dull = clamp((adapt_top_edge_target_low - at_edge_ratio) * at_edge_dull_inv_denom, 0, 1);
+  at_edge_bright = clamp((at_edge_ratio - adapt_top_edge_target_high) * at_edge_bright_inv_denom, 0, 1);
   at_presence_gain_target_db = adapt_top_presence_max_boost_db * at_edge_dull - adapt_top_presence_max_cut_db * at_edge_bright;
 
-  at_air_dull = clamp((adapt_top_air_target_low - at_air_ratio) / max(adapt_top_air_target_low - 0.006, 0.000001), 0, 1);
-  at_air_bright = clamp((at_air_ratio - adapt_top_air_target_high) / max(0.38 - adapt_top_air_target_high, 0.000001), 0, 1);
+  at_air_dull = clamp((adapt_top_air_target_low - at_air_ratio) * at_air_dull_inv_denom, 0, 1);
+  at_air_bright = clamp((at_air_ratio - adapt_top_air_target_high) * at_air_bright_inv_denom, 0, 1);
   at_air_gain_target_db = adapt_top_air_max_boost_db * at_air_dull - adapt_top_air_max_cut_db * at_air_bright;
 
-  at_edge_guard = clamp((at_edge_ratio - 0.46) / 0.34, 0, 1);
+  at_edge_guard = clamp((at_edge_ratio - 0.46) * 2.9411764705882353, 0, 1);
   at_air_positive_db = max(at_air_gain_target_db, 0);
   at_air_gain_target_db -= at_air_positive_db * (0.55 * at_edge_guard);
 
@@ -1509,8 +2559,21 @@ b4_l *= presence_gain * top_presence_adapt_gain; b4_r *= presence_gain * top_pre
 b5_l *= presence_gain * top_presence_adapt_gain; b5_r *= presence_gain * top_presence_adapt_gain;
 b6_l *= brilliance_gain * top_air_adapt_gain; b6_r *= brilliance_gain * top_air_adapt_gain;
 
-b1_det = absmax2(b1_l, b1_r) * b1_det_sc_gain;
-b2_det = absmax2(b2_l, b2_r) * b2_det_sc_gain;
+mb_src1_l = b1_l; mb_src1_r = b1_r;
+mb_src2_l = b2_l; mb_src2_r = b2_r;
+mb_src3_l = b3_l; mb_src3_r = b3_r;
+mb_src4_l = b4_l; mb_src4_r = b4_r;
+mb_src5_l = b5_l; mb_src5_r = b5_r;
+mb_src6_l = b6_l; mb_src6_r = b6_r;
+
+shape_recovery_amt = mb_shape;
+sc_pre_b1 = absmax2(mb_src1_l, mb_src1_r) + 0.0000001;
+sc_pre_b2 = absmax2(mb_src2_l, mb_src2_r) + 0.0000001;
+sc_pre_b3 = absmax2(mb_src3_l, mb_src3_r) + 0.0000001;
+sc_recovery_permission = shape_recovery_amt;
+
+b1_det = absmax2(mb_src1_l, mb_src1_r) * density_detector_gain * b1_det_db2lin;
+b2_det = absmax2(mb_src2_l, mb_src2_r) * density_detector_gain * b2_det_db2lin;
 
 gate_xt2_strength = gate_effective * 0.78;
 low_band_release_gated = low_band_release * (1 - gate_xt2_strength) + gate_xt2_freeze_release * gate_xt2_strength;
@@ -1521,46 +2584,368 @@ low_band_release_gated = low_band_release_gated * (1 - gate_reopen_rel_mix) + ga
 low_band_release_slow_gated = low_band_release_slow_gated * (1 - gate_reopen_rel_mix) + gate_reopen_release * gate_reopen_rel_mix;
 band_release_gated = band_release_gated * (1 - gate_reopen_rel_mix) + gate_reopen_release * gate_reopen_rel_mix;
 band_release_slow_gated = band_release_slow_gated * (1 - gate_reopen_rel_mix) + gate_reopen_release * gate_reopen_rel_mix;
-g1 = lim1.band_limit_gain_pd(b1_det, b1_thresh, band_attack, low_band_release_gated, low_band_release_slow_gated, pd_release);
-g2 = lim2.band_limit_gain_pd(b2_det, b2_thresh, band_attack, low_band_release_gated, low_band_release_slow_gated, pd_release);
 
-g3 = lim3.band_limit_gain_pd_soft(absmax2(b3_l, b3_r) * density_detector_gain, b3_thresh, upper_mid_band_attack, band_release_gated, band_release_slow_gated, pd_release, 4.2, 0.30, 0.14);
-g4 = lim4.band_limit_gain_pd_soft(absmax2(b4_l, b4_r) * density_detector_gain, b4_thresh, upper_band_attack, band_release_gated, band_release_slow_gated, pd_release, 3.1, 0.42, 0.16);
-g5 = lim5.band_limit_gain_pd_soft(absmax2(b5_l, b5_r) * density_detector_gain, b5_thresh, upper_band_attack, band_release_gated, band_release_slow_gated, pd_release, 2.6, 0.55, 0.18);
-g6 = lim6.band_limit_gain_pd_soft(absmax2(b6_l, b6_r) * density_detector_gain, b6_thresh, upper_band_attack, band_release_gated, band_release_slow_gated, pd_release, 2.4, 0.65, 0.20);
+comp_g1_raw = lim1.band_limit_gain_pd(b1_det, b1_thresh, band_attack, low_band_release_gated, low_band_release_slow_gated, pd_release);
+comp_g2_raw = lim2.band_limit_gain_pd(b2_det, b2_thresh, band_attack, low_band_release_gated, low_band_release_slow_gated, pd_release);
 
-g1 = 1 - xt2_mix * (1 - g1);
-g2 = 1 - xt2_mix * (1 - g2);
-g3 = 1 - xt2_mix * (1 - g3);
-g4 = 1 - xt2_mix * (1 - g4);
-g5 = 1 - xt2_mix * (1 - g5);
-g6 = 1 - xt2_mix * (1 - g6);
+b3_det = absmax2(mb_src3_l, mb_src3_r) * density_detector_gain;
+b4_det = absmax2(mb_src4_l, mb_src4_r) * density_detector_gain;
+b5_det = absmax2(mb_src5_l, mb_src5_r) * density_detector_gain;
+b6_det = absmax2(mb_src6_l, mb_src6_r) * density_detector_gain;
+comp_g3_raw = lim3.band_limit_gain_pd_soft(b3_det, b3_thresh, upper_mid_band_attack, band_release_gated, band_release_slow_gated, pd_release, 4.2, 0.30, 0.14);
+comp_g4_raw = lim4.band_limit_gain_pd_soft(b4_det, b4_thresh, upper_band_attack, band_release_gated, band_release_slow_gated, pd_release, 3.1, 0.42, 0.16);
+comp_g5_raw = lim5.band_limit_gain_pd_soft(b5_det, b5_thresh, upper_band_attack, band_release_gated, band_release_slow_gated, pd_release, 2.6, 0.55, 0.18);
+comp_g6_raw = lim6.band_limit_gain_pd_soft(b6_det, b6_thresh, upper_band_attack, band_release_gated, band_release_slow_gated, pd_release, 2.4, 0.65, 0.20);
 
-low_coherence > 0 ? (
-  low_shared_gain = sqrt(max(g1 * g2, 0.000001));
-  g1 = g1 * (1 - low_coherence) + low_shared_gain * low_coherence;
-  g2 = g2 * (1 - low_coherence) + low_shared_gain * low_coherence;
+comp_g1 = 1 - xt2_mix * (1 - comp_g1_raw);
+comp_g2 = 1 - xt2_mix * (1 - comp_g2_raw);
+comp_g3 = 1 - xt2_mix * (1 - comp_g3_raw);
+comp_g4 = 1 - xt2_mix * (1 - comp_g4_raw);
+comp_g5 = 1 - xt2_mix * (1 - comp_g5_raw);
+comp_g6 = 1 - xt2_mix * (1 - comp_g6_raw);
+
+comp_low_shared_gain = sqrt(max(comp_g1 * comp_g2, 0.000001));
+comp_g1 = comp_g1 * (1 - low_coherence) + comp_low_shared_gain * low_coherence;
+comp_g2 = comp_g2 * (1 - low_coherence) + comp_low_shared_gain * low_coherence;
+comp_g6 = comp_g5;
+
+comp_b1_l = mb_src1_l; comp_b1_r = mb_src1_r;
+comp_b2_l = mb_src2_l; comp_b2_r = mb_src2_r;
+comp_b3_l = mb_src3_l; comp_b3_r = mb_src3_r;
+comp_b4_l = mb_src4_l; comp_b4_r = mb_src4_r;
+comp_b5_l = mb_src5_l; comp_b5_r = mb_src5_r;
+comp_b6_l = mb_src6_l; comp_b6_r = mb_src6_r;
+
+mb_clip_mix_work = clamp(mb_clip_mix, 0, 1);
+mb_clip_mix_work > 0 ? (
+  meter_mb_pre3 = absmax2(comp_b3_l, comp_b3_r);
+  meter_mb_pre4 = absmax2(comp_b4_l, comp_b4_r);
+  meter_mb_pre5 = absmax2(comp_b5_l, comp_b5_r);
+  meter_mb_pre6 = absmax2(comp_b6_l, comp_b6_r);
+
+  dc3_amt = dc_cancel * 0.35;
+  dc4_amt = dc_cancel * 0.55;
+  dc5_amt = dc_cancel * 0.78;
+  dc6_amt = dc_cancel * 0.92;
+
+  comp_b3_l = mb_clip3_l.mb_soft_clip_dc(comp_b3_l, mb_work_ref * 0.56, mb_clip_mix_work * 0.55, 0.42, dc3_amt, dist_cancel_a);
+  comp_b3_r = mb_clip3_r.mb_soft_clip_dc(comp_b3_r, mb_work_ref * 0.56, mb_clip_mix_work * 0.55, 0.42, dc3_amt, dist_cancel_a);
+  comp_b4_l = mb_clip4_l.mb_soft_clip_dc(comp_b4_l, mb_work_ref * 0.48, mb_clip_mix_work * 0.75, 0.36, dc4_amt, dist_cancel_a);
+  comp_b4_r = mb_clip4_r.mb_soft_clip_dc(comp_b4_r, mb_work_ref * 0.48, mb_clip_mix_work * 0.75, 0.36, dc4_amt, dist_cancel_a);
+  comp_b5_l = mb_clip5_l.mb_soft_clip_dc(comp_b5_l, mb_work_ref * 0.40, mb_clip_mix_work, 0.30, dc5_amt, dist_cancel_a);
+  comp_b5_r = mb_clip5_r.mb_soft_clip_dc(comp_b5_r, mb_work_ref * 0.40, mb_clip_mix_work, 0.30, dc5_amt, dist_cancel_a);
+  comp_b6_l = mb_clip6_l.mb_soft_clip_dc(comp_b6_l, mb_work_ref * 0.32, mb_clip_mix_work, 0.24, dc6_amt, dist_cancel_a);
+  comp_b6_r = mb_clip6_r.mb_soft_clip_dc(comp_b6_r, mb_work_ref * 0.32, mb_clip_mix_work, 0.24, dc6_amt, dist_cancel_a);
+
+  meter_mb_post3 = absmax2(comp_b3_l, comp_b3_r);
+  meter_mb_post4 = absmax2(comp_b4_l, comp_b4_r);
+  meter_mb_post5 = absmax2(comp_b5_l, comp_b5_r);
+  meter_mb_post6 = absmax2(comp_b6_l, comp_b6_r);
+
+  meter_blk_mb_pre3 = max(meter_blk_mb_pre3, meter_mb_pre3);
+  meter_blk_mb_pre4 = max(meter_blk_mb_pre4, meter_mb_pre4);
+  meter_blk_mb_pre5 = max(meter_blk_mb_pre5, meter_mb_pre5);
+  meter_blk_mb_pre6 = max(meter_blk_mb_pre6, meter_mb_pre6);
+  meter_blk_mb_post3 = max(meter_blk_mb_post3, meter_mb_post3);
+  meter_blk_mb_post4 = max(meter_blk_mb_post4, meter_mb_post4);
+  meter_blk_mb_post5 = max(meter_blk_mb_post5, meter_mb_post5);
+  meter_blk_mb_post6 = max(meter_blk_mb_post6, meter_mb_post6);
+
+  meter_heavy_tick ? (
+    meter_mb_now_db = max(max(max(0, meter_to_db(meter_blk_mb_pre3) - meter_to_db(meter_blk_mb_post3)),
+                              max(0, meter_to_db(meter_blk_mb_pre4) - meter_to_db(meter_blk_mb_post4))),
+                          max(max(0, meter_to_db(meter_blk_mb_pre5) - meter_to_db(meter_blk_mb_post5)),
+                              max(0, meter_to_db(meter_blk_mb_pre6) - meter_to_db(meter_blk_mb_post6))));
+    meter_mb_clip_max_db = max(meter_mb_clip_max_db, meter_mb_now_db);
+    meter_note_activity(1, meter_mb_now_db * mb_comp_keep);
+    meter_blk_mb_pre3 = meter_blk_mb_pre4 = meter_blk_mb_pre5 = meter_blk_mb_pre6 = 0;
+    meter_blk_mb_post3 = meter_blk_mb_post4 = meter_blk_mb_post5 = meter_blk_mb_post6 = 0;
+  );
 );
 
-g6 = g5;
+comp_p1_l = comp_b1_l * comp_g1; comp_p1_r = comp_b1_r * comp_g1;
+comp_p2_l = comp_b2_l * comp_g2; comp_p2_r = comp_b2_r * comp_g2;
+comp_p3_l = comp_b3_l * comp_g3; comp_p3_r = comp_b3_r * comp_g3;
+comp_p4_l = comp_b4_l * comp_g4; comp_p4_r = comp_b4_r * comp_g4;
+comp_p5_l = comp_b5_l * comp_g5; comp_p5_r = comp_b5_r * comp_g5;
+comp_p6_l = comp_b6_l * comp_g6; comp_p6_r = comp_b6_r * comp_g6;
 
-mb_clip_mix > 0 ? (
-  b3_l = mb_clip3_l.mb_soft_clip_dc(b3_l, mb_work_ref * 0.56, mb_clip_mix * 0.55, 0.42, dc3_amt, dist_cancel_a);
-  b3_r = mb_clip3_r.mb_soft_clip_dc(b3_r, mb_work_ref * 0.56, mb_clip_mix * 0.55, 0.42, dc3_amt, dist_cancel_a);
-  b4_l = mb_clip4_l.mb_soft_clip_dc(b4_l, mb_work_ref * 0.48, mb_clip_mix * 0.75, 0.36, dc4_amt, dist_cancel_a);
-  b4_r = mb_clip4_r.mb_soft_clip_dc(b4_r, mb_work_ref * 0.48, mb_clip_mix * 0.75, 0.36, dc4_amt, dist_cancel_a);
-  b5_l = mb_clip5_l.mb_soft_clip_dc(b5_l, mb_work_ref * 0.40, mb_clip_mix, 0.30, dc5_amt, dist_cancel_a);
-  b5_r = mb_clip5_r.mb_soft_clip_dc(b5_r, mb_work_ref * 0.40, mb_clip_mix, 0.30, dc5_amt, dist_cancel_a);
-  b6_l = mb_clip6_l.mb_soft_clip_dc(b6_l, mb_work_ref * 0.32, mb_clip_mix, 0.24, dc6_amt, dist_cancel_a);
-  b6_r = mb_clip6_r.mb_soft_clip_dc(b6_r, mb_work_ref * 0.32, mb_clip_mix, 0.24, dc6_amt, dist_cancel_a);
+producer_density_active ? (
+comp_post_b1 = absmax2(comp_p1_l, comp_p1_r) + 0.0000001;
+comp_post_b2 = absmax2(comp_p2_l, comp_p2_r) + 0.0000001;
+comp_post_b3 = absmax2(comp_p3_l, comp_p3_r) + 0.0000001;
+
+shape_rec_comp_ratio1_blk = max(shape_rec_comp_ratio1_blk, sc_pre_b1 / comp_post_b1);
+shape_rec_comp_ratio2_blk = max(shape_rec_comp_ratio2_blk, sc_pre_b2 / comp_post_b2);
+shape_rec_comp_ratio3_blk = max(shape_rec_comp_ratio3_blk, sc_pre_b3 / comp_post_b3);
+
+shape_rec_heavy_tick ? (
+  comp_loss1_db = max(0, lin2db(shape_rec_comp_ratio1_blk) - 0.18);
+  comp_loss2_db = max(0, lin2db(shape_rec_comp_ratio2_blk) - 0.18);
+  comp_loss3_db = max(0, lin2db(shape_rec_comp_ratio3_blk) - 0.25);
+
+  comp_rec1_target_db = min(comp_loss1_db * 0.55, 2.30) * sc_recovery_permission;
+  comp_rec2_target_db = min(comp_loss2_db * 0.62, 2.45) * sc_recovery_permission;
+  comp_rec3_target_db = min(comp_loss3_db * 0.18, 0.65) * sc_recovery_permission;
+
+  comp_rec1_target_db < shape_comp_rec1_db ?
+    shape_comp_rec1_db += shape_rec_release_blk * (comp_rec1_target_db - shape_comp_rec1_db) :
+    shape_comp_rec1_db += shape_rec_attack_blk * (comp_rec1_target_db - shape_comp_rec1_db);
+  comp_rec2_target_db < shape_comp_rec2_db ?
+    shape_comp_rec2_db += shape_rec_release_blk * (comp_rec2_target_db - shape_comp_rec2_db) :
+    shape_comp_rec2_db += shape_rec_attack_blk * (comp_rec2_target_db - shape_comp_rec2_db);
+  comp_rec3_target_db < shape_comp_rec3_db ?
+    shape_comp_rec3_db += shape_rec_release_blk * (comp_rec3_target_db - shape_comp_rec3_db) :
+    shape_comp_rec3_db += shape_rec_attack_blk * (comp_rec3_target_db - shape_comp_rec3_db);
+
+  comp_rec1_gain = db2lin(shape_comp_rec1_db);
+  comp_rec2_gain = db2lin(shape_comp_rec2_db);
+  comp_rec3_gain = db2lin(shape_comp_rec3_db);
+
+  shape_rec_comp_ratio1_blk = shape_rec_comp_ratio2_blk = shape_rec_comp_ratio3_blk = 1;
 );
 
-p1_l = b1_l*g1; p1_r = b1_r*g1;
-p2_l = b2_l*g2; p2_r = b2_r*g2;
-p3_l = b3_l*g3; p3_r = b3_r*g3;
-p4_l = b4_l*g4; p4_r = b4_r*g4;
-p5_l = b5_l*g5; p5_r = b5_r*g5;
-p6_l = b6_l*g6; p6_r = b6_r*g6;
+comp_p1_l *= comp_rec1_gain; comp_p1_r *= comp_rec1_gain;
+comp_p2_l *= comp_rec2_gain; comp_p2_r *= comp_rec2_gain;
+comp_p3_l *= comp_rec3_gain; comp_p3_r *= comp_rec3_gain;
+
+lim_b1_det = absmax2(mb_src1_l, mb_src1_r);
+lim_b2_det = absmax2(mb_src2_l, mb_src2_r);
+lim_b3_det = absmax2(mb_src3_l, mb_src3_r);
+lim_b4_det = absmax2(mb_src4_l, mb_src4_r);
+lim_b5_det = absmax2(mb_src5_l, mb_src5_r);
+lim_b6_det = absmax2(mb_src6_l, mb_src6_r);
+
+lim_quiet1 = lim_work1*(1-0.000000000001);
+lim_quiet2 = lim_work2*(1-0.000000000001);
+lim_quiet3 = lim_work3*(1-0.000000000001);
+lim_quiet4 = lim_work4*(1-0.000000000001);
+lim_quiet5 = lim_work5*(1-0.000000000001);
+lim_quiet6 = lim_work6*(1-0.000000000001);
+
+lim_g1_raw = mb_ev1.band_event_gain_auto(lim_b1_det, lim_work1_db, lim_quiet1, mb_event_attack, mb_event_release_fast, mb_event_release_slow);
+lim_g2_raw = mb_ev2.band_event_gain_auto(lim_b2_det, lim_work2_db, lim_quiet2, mb_event_attack, mb_event_release_fast, mb_event_release_slow);
+lim_g3_raw = mb_ev3.band_event_gain_auto(lim_b3_det, lim_work3_db, lim_quiet3, mb_event_attack, mb_event_release_fast, mb_event_release_slow);
+lim_g4_raw = mb_ev4.band_event_gain_auto(lim_b4_det, lim_work4_db, lim_quiet4, mb_event_attack, mb_event_release_fast, mb_event_release_slow);
+lim_g5_raw = mb_ev5.band_event_gain_auto(lim_b5_det, lim_work5_db, lim_quiet5, mb_event_attack, mb_event_release_fast, mb_event_release_slow);
+lim_g6_raw = mb_ev6.band_event_gain_auto(lim_b6_det, lim_work6_db, lim_quiet6, mb_event_attack, mb_event_release_fast, mb_event_release_slow);
+
+lim_g1 = lim_g1_raw;
+lim_g2 = lim_g2_raw;
+lim_g3 = lim_g3_raw;
+lim_g4 = lim_g4_raw;
+lim_g5 = lim_g5_raw;
+lim_g6 = lim_g6_raw;
+
+lim_p1_l = mb_src1_l * lim_g1; lim_p1_r = mb_src1_r * lim_g1;
+lim_p2_l = mb_src2_l * lim_g2; lim_p2_r = mb_src2_r * lim_g2;
+lim_p3_l = mb_src3_l * lim_g3; lim_p3_r = mb_src3_r * lim_g3;
+lim_p4_l = mb_src4_l * lim_g4; lim_p4_r = mb_src4_r * lim_g4;
+lim_p5_l = mb_src5_l * lim_g5; lim_p5_r = mb_src5_r * lim_g5;
+lim_p6_l = mb_src6_l * lim_g6; lim_p6_r = mb_src6_r * lim_g6;
+
+lim_p4_l *= mb_presence_post; lim_p4_r *= mb_presence_post;
+lim_p5_l *= mb_presence_post; lim_p5_r *= mb_presence_post;
+lim_p6_l *= mb_brilliance_post; lim_p6_r *= mb_brilliance_post;
+
+lim_soft_amt = 0.35;
+lim_soft_shape = 0.75;
+lim_p1_l = lim_band_clip(lim_p1_l, lim_work1, lim_soft_amt, lim_soft_shape);
+lim_p1_r = lim_band_clip(lim_p1_r, lim_work1, lim_soft_amt, lim_soft_shape);
+lim_p2_l = lim_band_clip(lim_p2_l, lim_work2, lim_soft_amt, lim_soft_shape);
+lim_p2_r = lim_band_clip(lim_p2_r, lim_work2, lim_soft_amt, lim_soft_shape);
+lim_p3_l = lim_band_clip(lim_p3_l, lim_work3, lim_soft_amt, lim_soft_shape);
+lim_p3_r = lim_band_clip(lim_p3_r, lim_work3, lim_soft_amt, lim_soft_shape);
+lim_p4_l = lim_band_clip(lim_p4_l, lim_work4, lim_soft_amt, lim_soft_shape);
+lim_p4_r = lim_band_clip(lim_p4_r, lim_work4, lim_soft_amt, lim_soft_shape);
+lim_p5_l = lim_band_clip(lim_p5_l, lim_work5, lim_soft_amt, lim_soft_shape);
+lim_p5_r = lim_band_clip(lim_p5_r, lim_work5, lim_soft_amt, lim_soft_shape);
+lim_p6_l = lim_band_clip(lim_p6_l, lim_work6, lim_soft_amt, lim_soft_shape);
+lim_p6_r = lim_band_clip(lim_p6_r, lim_work6, lim_soft_amt, lim_soft_shape);
+
+lim_post_b1 = absmax2(lim_p1_l, lim_p1_r) + 0.0000001;
+lim_post_b2 = absmax2(lim_p2_l, lim_p2_r) + 0.0000001;
+lim_post_b3 = absmax2(lim_p3_l, lim_p3_r) + 0.0000001;
+
+shape_rec_lim_ratio1_blk = max(shape_rec_lim_ratio1_blk, sc_pre_b1 / lim_post_b1);
+shape_rec_lim_ratio2_blk = max(shape_rec_lim_ratio2_blk, sc_pre_b2 / lim_post_b2);
+shape_rec_lim_ratio3_blk = max(shape_rec_lim_ratio3_blk, sc_pre_b3 / lim_post_b3);
+
+shape_rec_heavy_tick ? (
+  lim_loss1_db = max(0, lin2db(shape_rec_lim_ratio1_blk) - 0.18);
+  lim_loss2_db = max(0, lin2db(shape_rec_lim_ratio2_blk) - 0.18);
+  lim_loss3_db = max(0, lin2db(shape_rec_lim_ratio3_blk) - 0.25);
+
+  lim_rec1_target_db = min(lim_loss1_db * 0.62, 2.60) * sc_recovery_permission;
+  lim_rec2_target_db = min(lim_loss2_db * 0.70, 2.75) * sc_recovery_permission;
+  lim_rec3_target_db = min(lim_loss3_db * 0.20, 0.75) * sc_recovery_permission;
+
+  lim_rec1_target_db < shape_lim_rec1_db ?
+    shape_lim_rec1_db += shape_rec_release_blk * (lim_rec1_target_db - shape_lim_rec1_db) :
+    shape_lim_rec1_db += shape_rec_attack_blk * (lim_rec1_target_db - shape_lim_rec1_db);
+  lim_rec2_target_db < shape_lim_rec2_db ?
+    shape_lim_rec2_db += shape_rec_release_blk * (lim_rec2_target_db - shape_lim_rec2_db) :
+    shape_lim_rec2_db += shape_rec_attack_blk * (lim_rec2_target_db - shape_lim_rec2_db);
+  lim_rec3_target_db < shape_lim_rec3_db ?
+    shape_lim_rec3_db += shape_rec_release_blk * (lim_rec3_target_db - shape_lim_rec3_db) :
+    shape_lim_rec3_db += shape_rec_attack_blk * (lim_rec3_target_db - shape_lim_rec3_db);
+
+  lim_rec1_gain = db2lin(shape_lim_rec1_db);
+  lim_rec2_gain = db2lin(shape_lim_rec2_db);
+  lim_rec3_gain = db2lin(shape_lim_rec3_db);
+
+  shape_rec_lim_ratio1_blk = shape_rec_lim_ratio2_blk = shape_rec_lim_ratio3_blk = 1;
+);
+
+lim_p1_l *= lim_rec1_gain; lim_p1_r *= lim_rec1_gain;
+lim_p2_l *= lim_rec2_gain; lim_p2_r *= lim_rec2_gain;
+lim_p3_l *= lim_rec3_gain; lim_p3_r *= lim_rec3_gain;
+
+comp_p1_l *= mb_comp_fork_cal_gain; comp_p1_r *= mb_comp_fork_cal_gain;
+comp_p2_l *= mb_comp_fork_cal_gain; comp_p2_r *= mb_comp_fork_cal_gain;
+comp_p3_l *= mb_comp_fork_cal_gain; comp_p3_r *= mb_comp_fork_cal_gain;
+comp_p4_l *= mb_comp_fork_cal_gain; comp_p4_r *= mb_comp_fork_cal_gain;
+comp_p5_l *= mb_comp_fork_cal_gain; comp_p5_r *= mb_comp_fork_cal_gain;
+comp_p6_l *= mb_comp_fork_cal_gain; comp_p6_r *= mb_comp_fork_cal_gain;
+lim_p1_l *= mb_limiter_fork_cal_gain; lim_p1_r *= mb_limiter_fork_cal_gain;
+lim_p2_l *= mb_limiter_fork_cal_gain; lim_p2_r *= mb_limiter_fork_cal_gain;
+lim_p3_l *= mb_limiter_fork_cal_gain; lim_p3_r *= mb_limiter_fork_cal_gain;
+lim_p4_l *= mb_limiter_fork_cal_gain; lim_p4_r *= mb_limiter_fork_cal_gain;
+lim_p5_l *= mb_limiter_fork_cal_gain; lim_p5_r *= mb_limiter_fork_cal_gain;
+lim_p6_l *= mb_limiter_fork_cal_gain; lim_p6_r *= mb_limiter_fork_cal_gain;
+
+p1_l = comp_p1_l * mb_comp_keep + lim_p1_l * mb_comp_limiter; p1_r = comp_p1_r * mb_comp_keep + lim_p1_r * mb_comp_limiter;
+p2_l = comp_p2_l * mb_comp_keep + lim_p2_l * mb_comp_limiter; p2_r = comp_p2_r * mb_comp_keep + lim_p2_r * mb_comp_limiter;
+p3_l = comp_p3_l * mb_comp_keep + lim_p3_l * mb_comp_limiter; p3_r = comp_p3_r * mb_comp_keep + lim_p3_r * mb_comp_limiter;
+p4_l = comp_p4_l * mb_comp_keep + lim_p4_l * mb_comp_limiter; p4_r = comp_p4_r * mb_comp_keep + lim_p4_r * mb_comp_limiter;
+p5_l = comp_p5_l * mb_comp_keep + lim_p5_l * mb_comp_limiter; p5_r = comp_p5_r * mb_comp_keep + lim_p5_r * mb_comp_limiter;
+p6_l = comp_p6_l * mb_comp_keep + lim_p6_l * mb_comp_limiter; p6_r = comp_p6_r * mb_comp_keep + lim_p6_r * mb_comp_limiter;
+
+shape_servo_active ? (
+  shape_power_accum1 += (p1_l*p1_l + p1_r*p1_r) * 0.5;
+  shape_power_accum2 += (p2_l*p2_l + p2_r*p2_r) * 0.5;
+  shape_power_accum3 += (p3_l*p3_l + p3_r*p3_r) * 0.5;
+  shape_power_accum4 += (p4_l*p4_l + p4_r*p4_r) * 0.5;
+  shape_power_accum5 += (p5_l*p5_l + p5_r*p5_r) * 0.5;
+  shape_power_accum6 += (p6_l*p6_l + p6_r*p6_r) * 0.5;
+  shape_block_counter += 1;
+
+  shape_block_counter >= 32 ? (
+    shape_block_counter = 0;
+
+    shape_lvl1 += shape_servo_lvl_a_blk * ((shape_power_accum1 * 0.03125) - shape_lvl1);
+    shape_lvl2 += shape_servo_lvl_a_blk * ((shape_power_accum2 * 0.03125) - shape_lvl2);
+    shape_lvl3 += shape_servo_lvl_a_blk * ((shape_power_accum3 * 0.03125) - shape_lvl3);
+    shape_lvl4 += shape_servo_lvl_a_blk * ((shape_power_accum4 * 0.03125) - shape_lvl4);
+    shape_lvl5 += shape_servo_lvl_a_blk * ((shape_power_accum5 * 0.03125) - shape_lvl5);
+    shape_lvl6 += shape_servo_lvl_a_blk * ((shape_power_accum6 * 0.03125) - shape_lvl6);
+
+    shape_power_accum1 = shape_power_accum2 = shape_power_accum3 = 0;
+    shape_power_accum4 = shape_power_accum5 = shape_power_accum6 = 0;
+
+    shape_ref_lvl = sqrt(max((shape_lvl3 + shape_lvl4) * 0.5, 0.000000000001));
+    shape_l1_lvl = sqrt(max(shape_lvl1, 0.000000000001));
+    shape_l2_lvl = sqrt(max(shape_lvl2, 0.000000000001));
+    shape_l3_lvl = sqrt(max(shape_lvl3, 0.000000000001));
+    shape_l4_lvl = sqrt(max(shape_lvl4, 0.000000000001));
+    shape_l5_lvl = sqrt(max(shape_lvl5, 0.000000000001));
+    shape_l6_lvl = sqrt(max(shape_lvl6, 0.000000000001));
+
+    shape_ratio1_db = lin2db(shape_l1_lvl / shape_ref_lvl);
+    shape_ratio2_db = lin2db(shape_l2_lvl / shape_ref_lvl);
+    shape_ratio3_db = lin2db(shape_l3_lvl / shape_ref_lvl);
+    shape_ratio4_db = lin2db(shape_l4_lvl / shape_ref_lvl);
+    shape_ratio5_db = lin2db(shape_l5_lvl / shape_ref_lvl);
+    shape_ratio6_db = lin2db(shape_l6_lvl / shape_ref_lvl);
+
+    shape_presence_bias_db = clamp(presence_db, -6, 6);
+    shape_brilliance_bias_db = clamp(brilliance_db, -6, 6);
+    shape_tgt1_db = -1.8;
+    shape_tgt2_db = -0.7;
+    shape_tgt3_db = -0.3;
+    shape_tgt4_db = 0.0;
+    shape_tgt5_db = -2.2 + shape_presence_bias_db * 0.24;
+    shape_tgt6_db = -4.6 + shape_brilliance_bias_db * 0.26;
+
+    shape_servo1_tgt_db = (clamp((shape_tgt1_db - shape_ratio1_db) * 0.34, -1.75, 2.40) + 2.5) * mb_shape;
+    shape_servo2_tgt_db = (clamp((shape_tgt2_db - shape_ratio2_db) * 0.36, -1.65, 2.55) + 0.9) * mb_shape;
+    shape_servo3_tgt_db = clamp((shape_tgt3_db - shape_ratio3_db) * 0.16, -0.60, 0.55) * mb_shape;
+    shape_servo4_tgt_db = clamp((shape_tgt4_db - shape_ratio4_db) * 0.10, -0.40, 0.40) * mb_shape;
+    shape_servo5_tgt_db = clamp((shape_tgt5_db - shape_ratio5_db) * 0.18, -1.10, 1.15) * shape_hi_amt;
+    shape_servo6_tgt_db = clamp((shape_tgt6_db - shape_ratio6_db) * 0.18, -1.35, 1.35) * shape_hi_amt;
+
+    shape_servo1_db += shape_servo_gain_a_blk * (shape_servo1_tgt_db - shape_servo1_db);
+    shape_servo2_db += shape_servo_gain_a_blk * (shape_servo2_tgt_db - shape_servo2_db);
+    shape_servo3_db += shape_servo_gain_a_blk * (shape_servo3_tgt_db - shape_servo3_db);
+    shape_servo4_db += shape_servo_gain_a_blk * (shape_servo4_tgt_db - shape_servo4_db);
+    shape_servo5_db += shape_servo_gain_a_blk * (shape_servo5_tgt_db - shape_servo5_db);
+    shape_servo6_db += shape_servo_gain_a_blk * (shape_servo6_tgt_db - shape_servo6_db);
+
+    shape_servo_gain1 = db2lin(shape_servo1_db);
+    shape_servo_gain2 = db2lin(shape_servo2_db);
+    shape_servo_gain3 = db2lin(shape_servo3_db);
+    shape_servo_gain4 = db2lin(shape_servo4_db);
+    shape_servo_gain5 = db2lin(shape_servo5_db);
+    shape_servo_gain6 = db2lin(shape_servo6_db);
+  );
+
+  p1_l *= shape_servo_gain1; p1_r *= shape_servo_gain1;
+  p2_l *= shape_servo_gain2; p2_r *= shape_servo_gain2;
+  p3_l *= shape_servo_gain3; p3_r *= shape_servo_gain3;
+  p4_l *= shape_servo_gain4; p4_r *= shape_servo_gain4;
+  p5_l *= shape_servo_gain5; p5_r *= shape_servo_gain5;
+  p6_l *= shape_servo_gain6; p6_r *= shape_servo_gain6;
+);
+
+p4_l *= presence_edge_recovery_gain; p4_r *= presence_edge_recovery_gain;
+p5_l *= presence_body_recovery_gain; p5_r *= presence_body_recovery_gain;
+p6_l *= brilliance_recovery_gain; p6_r *= brilliance_recovery_gain;
+) : (
+p1_l = comp_p1_l; p1_r = comp_p1_r;
+p2_l = comp_p2_l; p2_r = comp_p2_r;
+p3_l = comp_p3_l; p3_r = comp_p3_r;
+p4_l = comp_p4_l; p4_r = comp_p4_r;
+p5_l = comp_p5_l; p5_r = comp_p5_r;
+p6_l = comp_p6_l; p6_r = comp_p6_r;
+);
+
+density_protection_drive_gain != 1 ? (
+  p1_l *= density_protection_drive_gain; p1_r *= density_protection_drive_gain;
+  p2_l *= density_protection_drive_gain; p2_r *= density_protection_drive_gain;
+  p3_l *= density_protection_drive_gain; p3_r *= density_protection_drive_gain;
+  p4_l *= density_protection_drive_gain; p4_r *= density_protection_drive_gain;
+  p5_l *= density_protection_drive_gain; p5_r *= density_protection_drive_gain;
+  p6_l *= density_protection_drive_gain; p6_r *= density_protection_drive_gain;
+);
+
+blend_g1 = comp_g1 * mb_comp_keep + lim_g1 * mb_comp_limiter;
+blend_g2 = comp_g2 * mb_comp_keep + lim_g2 * mb_comp_limiter;
+blend_g3 = comp_g3 * mb_comp_keep + lim_g3 * mb_comp_limiter;
+blend_g4 = comp_g4 * mb_comp_keep + lim_g4 * mb_comp_limiter;
+blend_g5 = comp_g5 * mb_comp_keep + lim_g5 * mb_comp_limiter;
+blend_g6 = comp_g6 * mb_comp_keep + lim_g6 * mb_comp_limiter;
+meter_blk_gr_min1 = min(meter_blk_gr_min1, max(blend_g1, 0.000001));
+meter_blk_gr_min2 = min(meter_blk_gr_min2, max(blend_g2, 0.000001));
+meter_blk_gr_min3 = min(meter_blk_gr_min3, max(blend_g3, 0.000001));
+meter_blk_gr_min4 = min(meter_blk_gr_min4, max(blend_g4, 0.000001));
+meter_blk_gr_min5 = min(meter_blk_gr_min5, max(blend_g5, 0.000001));
+meter_blk_gr_min6 = min(meter_blk_gr_min6, max(blend_g6, 0.000001));
+meter_heavy_tick ? (
+  meter_gain_reduction1_now = max(0, -lin2db(meter_blk_gr_min1));
+  meter_gain_reduction2_now = max(0, -lin2db(meter_blk_gr_min2));
+  meter_gain_reduction3_now = max(0, -lin2db(meter_blk_gr_min3));
+  meter_gain_reduction4_now = max(0, -lin2db(meter_blk_gr_min4));
+  meter_gain_reduction5_now = max(0, -lin2db(meter_blk_gr_min5));
+  meter_gain_reduction6_now = max(0, -lin2db(meter_blk_gr_min6));
+  meter_gain_reduction1_max = max(meter_gain_reduction1_max, meter_gain_reduction1_now);
+  meter_gain_reduction2_max = max(meter_gain_reduction2_max, meter_gain_reduction2_now);
+  meter_gain_reduction3_max = max(meter_gain_reduction3_max, meter_gain_reduction3_now);
+  meter_gain_reduction4_max = max(meter_gain_reduction4_max, meter_gain_reduction4_now);
+  meter_gain_reduction5_max = max(meter_gain_reduction5_max, meter_gain_reduction5_now);
+  meter_gain_reduction6_max = max(meter_gain_reduction6_max, meter_gain_reduction6_now);
+  meter_blk_gr_min1 = meter_blk_gr_min2 = meter_blk_gr_min3 = 1;
+  meter_blk_gr_min4 = meter_blk_gr_min5 = meter_blk_gr_min6 = 1;
+);
 
 effective_snubber_lookahead > 0 ? (
   srdpos = snub_wrpos - effective_snubber_lookahead;
@@ -1671,6 +3056,10 @@ upper_snubber > 0 ? (
   us_mix5 = us_amt * us_ngate5 * 0.92;
   us_mix6 = us_amt * us_ngate6 * 0.62;
 
+  us_pre4 = absmax2(dp4_l, dp4_r);
+  us_pre5 = absmax2(dp5_l, dp5_r);
+  us_pre6 = absmax2(dp6_l, dp6_r);
+
   dp4_l = pure_peak_round(dp4_l, us_th4, us_mix4, 0.42 + 0.10 * us_amt);
   dp4_r = pure_peak_round(dp4_r, us_th4, us_mix4, 0.42 + 0.10 * us_amt);
   dp5_l = pure_peak_round(dp5_l, us_th5, us_mix5, 0.48 + 0.14 * us_amt);
@@ -1680,6 +3069,25 @@ upper_snubber > 0 ? (
   us_tgain6 = 1 - us_mix6 * (1 - us_lim6);
   dp6_l *= us_tgain6;
   dp6_r *= us_tgain6;
+
+  us_post4 = absmax2(dp4_l, dp4_r);
+  us_post5 = absmax2(dp5_l, dp5_r);
+  us_post6 = absmax2(dp6_l, dp6_r);
+  meter_blk_us_pre4 = max(meter_blk_us_pre4, us_pre4);
+  meter_blk_us_pre5 = max(meter_blk_us_pre5, us_pre5);
+  meter_blk_us_pre6 = max(meter_blk_us_pre6, us_pre6);
+  meter_blk_us_post4 = max(meter_blk_us_post4, us_post4);
+  meter_blk_us_post5 = max(meter_blk_us_post5, us_post5);
+  meter_blk_us_post6 = max(meter_blk_us_post6, us_post6);
+  meter_heavy_tick ? (
+    us_red4_db = max(0, meter_to_db(meter_blk_us_pre4) - meter_to_db(meter_blk_us_post4));
+    us_red5_db = max(0, meter_to_db(meter_blk_us_pre5) - meter_to_db(meter_blk_us_post5));
+    us_red6_db = max(0, meter_to_db(meter_blk_us_pre6) - meter_to_db(meter_blk_us_post6));
+    meter_us_now_db = max(max(us_red4_db, us_red5_db), us_red6_db);
+    meter_note_activity(3, meter_us_now_db);
+    meter_blk_us_pre4 = meter_blk_us_pre5 = meter_blk_us_pre6 = 0;
+    meter_blk_us_post4 = meter_blk_us_post5 = meter_blk_us_post6 = 0;
+  );
 );
 
 p1_l = dp1_l; p1_r = dp1_r;
@@ -1691,14 +3099,17 @@ p6_l = dp6_l; p6_r = dp6_r;
 
 sum_l = p1_l + p2_l + p3_l + p4_l + p5_l + p6_l;
 sum_r = p1_r + p2_r + p3_r + p4_r + p5_r + p6_r;
-recomb_control > 0 ? (
-  recomb_l = soft_clip_knee(sum_l, recomb_clip_thresh, recomb_clip_knee);
-  recomb_r = soft_clip_knee(sum_r, recomb_clip_thresh, recomb_clip_knee);
-  l = sum_l + recomb_control * (recomb_l - sum_l);
-  r = sum_r + recomb_control * (recomb_r - sum_r);
-) : (
-  l = sum_l;
-  r = sum_r;
+recomb_l = soft_clip_knee(sum_l, recomb_clip_thresh, recomb_clip_knee);
+recomb_r = soft_clip_knee(sum_r, recomb_clip_thresh, recomb_clip_knee);
+l = sum_l + recomb_control * (recomb_l - sum_l);
+r = sum_r + recomb_control * (recomb_r - sum_r);
+
+meter_blk_recomb_pre = max(meter_blk_recomb_pre, absmax2(sum_l, sum_r));
+meter_blk_recomb_post = max(meter_blk_recomb_post, absmax2(l, r));
+meter_heavy_tick ? (
+  meter_recomb_now_db = max(0, meter_to_db(meter_blk_recomb_pre) - meter_to_db(meter_blk_recomb_post));
+  meter_note_activity(2, meter_recomb_now_db);
+  meter_blk_recomb_pre = meter_blk_recomb_post = 0;
 );
 
 transition_fill > 0 ? (
@@ -1711,46 +3122,94 @@ low_bass_floor > 0 ? (
   r = low_floor_r.biquad_run(r);
 );
 
-post_xt2_smooth_drive_amt > 0.0000001 ? (
+xt2_section_mode == 3 ? (
+  l = xt2_section_in_l;
+  r = xt2_section_in_r;
+) : (
+
+  post_xt2_smooth_drive_amt > 0.0000001 ? (
     l = post_xt2_round_l.smooth_drive_rounder(l, post_xt2_smooth_drive_amt) * post_xt2_smooth_recovery_gain;
     r = post_xt2_round_r.smooth_drive_rounder(r, post_xt2_smooth_drive_amt) * post_xt2_smooth_recovery_gain;
   );
 
+  l *= mb_limiter_handoff_cal_gain;
+  r *= mb_limiter_handoff_cal_gain;
+
+  l *= density_output_gain;
+  r *= density_output_gain;
+);
+
 xt2_section_proc_l = l;
 xt2_section_proc_r = r;
+xt2_ref_l = xt2_section_in_l;
+xt2_ref_r = xt2_section_in_r;
+effective_snubber_lookahead > 0 ? (
+  dxrdpos = diag_xt2_wrpos - effective_snubber_lookahead;
+  dxrdpos < 0 ? dxrdpos += diag_xt2_buf_len;
+  xt2_ref_l = diag_xt2_l[dxrdpos];
+  xt2_ref_r = diag_xt2_r[dxrdpos];
+  diag_xt2_l[diag_xt2_wrpos] = xt2_section_in_l;
+  diag_xt2_r[diag_xt2_wrpos] = xt2_section_in_r;
+  diag_xt2_wrpos += 1;
+  diag_xt2_wrpos >= diag_xt2_buf_len ? diag_xt2_wrpos = 0;
+);
+
+xt2_section_mode == 1 ? (
+  diag_l = xt2_section_proc_l;
+  diag_r = xt2_section_proc_r;
+  diag_active = 1;
+) : xt2_section_mode == 2 ? (
+  diag_l = xt2_section_proc_l - xt2_ref_l;
+  diag_r = xt2_section_proc_r - xt2_ref_r;
+  diag_active = 1;
+);
 
 stereo_section_in_l = l;
 stereo_section_in_r = r;
 
-
-mid = (l + r) * 0.5;
-side = (l - r) * 0.5;
-side *= side_scale;
-
 stereo_section_active ? (
-  stereo_mode == 1 ? (
-    side = soft_clip_knee(side, max(0.05, abs(mid) * 0.90 + 0.08), 0.30);
-  );
+  mid = (l + r) * 0.5;
+  side = (l - r) * 0.5 * (stereo_width_pct * 0.01);
+  stereo_mode == 1 ? side = soft_clip_knee(side, max(0.05, abs(mid) * 0.90 + 0.08), 0.30);
+  l = mid + side;
+  r = mid - side;
 );
 
-l = mid + side;
-r = mid - side;
+pre_k > 0 ? (
+  l = pre_l.fm_emph(l, pre_k);
+  r = pre_r.fm_emph(r, pre_k);
+);
 
 stereo_section_proc_l = l;
 stereo_section_proc_r = r;
+stereo_section_mode == 1 ? (
+  diag_l = stereo_section_proc_l;
+  diag_r = stereo_section_proc_r;
+  diag_active = 1;
+) : stereo_section_mode == 2 ? (
+  diag_l = stereo_section_proc_l - stereo_section_in_l;
+  diag_r = stereo_section_proc_r - stereo_section_in_r;
+  diag_active = 1;
+);
 
 final_section_in_l = l;
 final_section_in_r = r;
-
-l *= pre_final_drive_gain;
-r *= pre_final_drive_gain;
+l *= stream_pre_final_drive_gain;
+r *= stream_pre_final_drive_gain;
+final_in_mid = (final_section_in_l + final_section_in_r) * 0.5;
+final_in_side = (final_section_in_l - final_section_in_r) * 0.5;
+meter_final_in_mid_peak = max(meter_final_in_mid_peak, abs(final_in_mid));
+meter_final_in_side_peak = max(meter_final_in_side_peak, abs(final_in_side));
 
 final_threshold_drive_s <= 0 ? final_threshold_drive_s = final_threshold_drive_target;
 final_threshold_drive_s = final_threshold_drive_target + final_threshold_smooth * (final_threshold_drive_s - final_threshold_drive_target);
 final_threshold_drive = final_threshold_drive_s;
 
-final_threshold_makeup_cancel = (final_threshold_drive > 1 && final_threshold_makeup < 0.999999) ? exp(-log(final_threshold_drive) * (1 - final_threshold_makeup)) : 1;
+final_threshold_makeup_cancel = final_threshold_makeup >= 0.999999 ? 1 :
+                                final_threshold_drive > 1 ? exp(-log(final_threshold_drive) * (1 - final_threshold_makeup)) : 1;
 
+final_delta_ref_pre_l = final_section_in_l * final_threshold_drive * final_threshold_makeup_cancel * output_gain;
+final_delta_ref_pre_r = final_section_in_r * final_threshold_drive * final_threshold_makeup_cancel * output_gain;
 
 l *= final_threshold_drive;
 r *= final_threshold_drive;
@@ -1771,9 +3230,15 @@ final_threshold_drive > 1.000001 ? (
 
 clip_full_det = absmax2(l, r);
 clip_full_env = final_full_env.peak_env(clip_full_det, clip_attack, clip_release);
-level_factor = clamp((clip_full_env - ceiling * 0.55) / max(ceiling * 0.35, 0.000001), 0, 1);
+level_factor = clamp((clip_full_env - ceiling * 0.55) * inv_level_factor_denom, 0, 1);
 protect_db = peak_only_final_limiter ? 0 : -2.0 * clip_restraint * level_factor;
-dynamic_clip_gain = protect_db < 0 ? db2lin(protect_db) : 1;
+dynamic_clip_gain = db2lin(protect_db);
+meter_blk_guard_min = min(meter_blk_guard_min, max(dynamic_clip_gain, 0.000001));
+meter_heavy_tick ? (
+  meter_guard_now_db = max(0, -lin2db(meter_blk_guard_min));
+  meter_note_activity(5, meter_guard_now_db);
+  meter_blk_guard_min = 1;
+);
 final_drive_gain = peak_only_final_limiter ? 1 : dynamic_clip_gain;
 
 l *= final_drive_gain;
@@ -1782,6 +3247,13 @@ r *= final_drive_gain;
 pre_det = absmax2(l, r);
 pre_tgain = preclip.linked_limiter_gain(pre_det, prelimit_thresh, clip_attack, clip_release);
 pre_tgain = 1 - prelimit_mix * (1 - pre_tgain);
+meter_blk_preclip_min = min(meter_blk_preclip_min, max(pre_tgain, 0.000001));
+meter_heavy_tick ? (
+  meter_preclip_now_db = max(0, -lin2db(meter_blk_preclip_min));
+  meter_preclip_max_db = max(meter_preclip_max_db, meter_preclip_now_db);
+  meter_note_activity(4, meter_preclip_now_db);
+  meter_blk_preclip_min = 1;
+);
 l *= pre_tgain;
 r *= pre_tgain;
 
@@ -1790,6 +3262,16 @@ clip_in_r = r;
 peak_only_final_limiter ? (
   clip_l = clip_in_l;
   clip_r = clip_in_r;
+) : clipper_ms_mode ? (
+
+  clip_mid = (clip_in_l + clip_in_r) * 0.5;
+  clip_side = (clip_in_l - clip_in_r) * 0.5;
+  clip_mid = soft_clip_knee(clip_mid, clip_stage1, clip_knee1);
+  clip_side = soft_clip_knee(clip_side, clip_stage1, clip_knee1);
+  clip_mid = soft_clip_knee(clip_mid, clip_stage2, clip_knee2);
+  clip_side = soft_clip_knee(clip_side, clip_stage2, clip_knee2);
+  clip_l = clip_mid + clip_side;
+  clip_r = clip_mid - clip_side;
 ) : (
   clip_l = soft_clip_knee(clip_in_l, clip_stage1, clip_knee1);
   clip_r = soft_clip_knee(clip_in_r, clip_stage1, clip_knee1);
@@ -1797,17 +3279,21 @@ peak_only_final_limiter ? (
   clip_r = soft_clip_knee(clip_r, clip_stage2, clip_knee2);
 );
 
+meter_blk_finalclip_pre = max(meter_blk_finalclip_pre, absmax2(clip_in_l, clip_in_r));
+meter_blk_finalclip_post = max(meter_blk_finalclip_post, absmax2(clip_l, clip_r));
+meter_heavy_tick ? (
+  meter_final_clip_now_db = max(0, meter_to_db(meter_blk_finalclip_pre) - meter_to_db(meter_blk_finalclip_post));
+  meter_final_clip_max_db = max(meter_final_clip_max_db, meter_final_clip_now_db);
+  meter_note_activity(6, meter_final_clip_now_db);
+  meter_blk_finalclip_pre = meter_blk_finalclip_post = 0;
+);
 dist_l = clip_l - clip_in_l;
 dist_r = clip_r - clip_in_r;
-dc_cancel > 0 ? (
-  dist_low_l = dist_lpf_l.onepole_lp(dist_l, dist_cancel_a);
-  dist_low_r = dist_lpf_r.onepole_lp(dist_r, dist_cancel_a);
-  l = clip_l - dist_low_l * dc_cancel * 0.45;
-  r = clip_r - dist_low_r * dc_cancel * 0.45;
-) : (
-  l = clip_l;
-  r = clip_r;
-);
+dist_low_l = dist_lpf_l.onepole_lp(dist_l, dist_cancel_a);
+dist_low_r = dist_lpf_r.onepole_lp(dist_r, dist_cancel_a);
+
+l = clip_l - dist_low_l * dc_cancel * 0.45;
+r = clip_r - dist_low_r * dc_cancel * 0.45;
 
 top_filter_mode == 1 ? (
   l = lpf15_1_l.biquad_run(l);
@@ -1817,23 +3303,42 @@ top_filter_mode == 1 ? (
   r = lpf15_2_r.biquad_run(lpf15_1_r.biquad_run(r));
 );
 
+deemph_after ? (
+  l = deemph_l.fm_deemph(l, pre_k);
+  r = deemph_r.fm_deemph(r, pre_k);
+);
 
 l *= final_threshold_makeup_cancel;
 r *= final_threshold_makeup_cancel;
 
-smooth_drive_rounder_amt > 0.0000001 ? (
-  l = final_round_l.smooth_drive_rounder(l, smooth_drive_rounder_amt);
-  r = final_round_r.smooth_drive_rounder(r, smooth_drive_rounder_amt);
+core_mode == 1 ? (
+  smooth_drive_rounder_amt > 0.0000001 && final_section_mode != 3 ? (
+    l = final_round_l.smooth_drive_rounder(l, smooth_drive_rounder_amt);
+    r = final_round_r.smooth_drive_rounder(r, smooth_drive_rounder_amt);
+  );
+  l *= output_gain;
+  r *= output_gain;
+) : (
+  l *= output_gain;
+  r *= output_gain;
+  smooth_drive_rounder_amt > 0.0000001 && final_section_mode != 3 ? (
+    l = final_round_l.smooth_drive_rounder(l, smooth_drive_rounder_amt);
+    r = final_round_r.smooth_drive_rounder(r, smooth_drive_rounder_amt);
+  );
 );
 
-l *= output_gain;
-r *= output_gain;
-
 fcs_thresh = fcs_thresh_setting;
+meter_final_safety_pre = absmax2(l, r);
 ov_l = l - hard_limit(l, fcs_thresh);
 ov_r = r - hard_limit(r, fcs_thresh);
 ov_l = fcs_res_l.onepole_lp(ov_l, fcs_residue_a);
 ov_r = fcs_res_r.onepole_lp(ov_r, fcs_residue_a);
+meter_blk_overshoot_peak = max(meter_blk_overshoot_peak, absmax2(l, r));
+meter_heavy_tick ? (
+  meter_overshoot_now_db = meter_over_db(meter_blk_overshoot_peak, fcs_thresh);
+  meter_over_ceiling_max_db = max(meter_over_ceiling_max_db, meter_overshoot_now_db);
+  meter_blk_overshoot_peak = 0;
+);
 
 effective_final_lookahead > 0 ? (
   rdpos = fcs_wrpos - effective_final_lookahead;
@@ -1859,47 +3364,241 @@ effective_final_lookahead > 0 ? (
   r = r - ov_r * overshoot_amt;
 );
 
-final_section_proc_l = hard_limit(l, ceiling);
-final_section_proc_r = hard_limit(r, ceiling);
+meter_blk_safety_peak = max(meter_blk_safety_peak, absmax2(l, r));
+meter_heavy_tick ? (
+  meter_safety_now_db = meter_over_db(meter_blk_safety_peak, ceiling);
+  meter_over_ceiling_max_db = max(meter_over_ceiling_max_db, meter_safety_now_db);
+  meter_blk_safety_peak = 0;
+);
+legacy_final_l=hard_limit(l,ceiling);
+legacy_final_r=hard_limit(r,ceiling);
+hybrid_total_spl > 0 ? (
+hybrid_drive=max(final_threshold_drive_s,1);
+hybrid_limit=ceiling/hybrid_drive;
+hybrid_make=hybrid_drive;
+hybrid_raw_l[hybrid_write]=legacy_final_l;
+hybrid_raw_r[hybrid_write]=legacy_final_r;
+hybrid_eventgate[hybrid_write]=0;
+hybrid_worklim[hybrid_write]=hybrid_limit;
+hybrid_makeup[hybrid_write]=hybrid_make;
+  hybrid_out_read=hybrid_write-hybrid_total_spl; hybrid_out_read<0?hybrid_out_read+=hybrid_buf_len;
+  stream_hybrid_mix <= 0.0000001 ? (
+    hybrid_limiter_window_tracked=0;
+    final_section_proc_l=hybrid_raw_l[hybrid_out_read];
+    final_section_proc_r=hybrid_raw_r[hybrid_out_read];
+    hybrid_write+=1; hybrid_write>=hybrid_buf_len?hybrid_write=0;
+    hybrid_clock+=1;
+  ) : (
+hybrid_cand_l=hybrid_shave(legacy_final_l,hybrid_limit,6);
+hybrid_cand_r=hybrid_shave(legacy_final_r,hybrid_limit,6);
+hybrid_candidate_l[hybrid_write]=hybrid_cand_l;
+hybrid_candidate_r[hybrid_write]=hybrid_cand_r;
+hybrid_delta_l=hybrid_cand_l-legacy_final_l;
+hybrid_delta_r=hybrid_cand_r-legacy_final_r;
+hybrid_old_ref=hybrid_refe[hybrid_energy_write];
+hybrid_old_delta=hybrid_deltae[hybrid_energy_write];
+hybrid_ref_sum-=hybrid_old_ref;
+hybrid_delta_sum-=hybrid_old_delta;
+hybrid_new_ref=legacy_final_l*legacy_final_l+legacy_final_r*legacy_final_r;
+hybrid_new_delta=hybrid_delta_l*hybrid_delta_l+hybrid_delta_r*hybrid_delta_r;
+hybrid_refe[hybrid_energy_write]=hybrid_new_ref;
+hybrid_deltae[hybrid_energy_write]=hybrid_new_delta;
+hybrid_ref_sum+=hybrid_new_ref;
+hybrid_delta_sum+=hybrid_new_delta;
+hybrid_energy_write+=1; hybrid_energy_write>=hybrid_window_spl?hybrid_energy_write=0;
+hybrid_energy_count=min(hybrid_energy_count+1,hybrid_window_spl);
+hybrid_ref_rms=sqrt(max(hybrid_ref_sum,0)/max(2*hybrid_energy_count,1));
+hybrid_ref_rms<db2lin(-60) ? hybrid_burden_target=1 : (
+  hybrid_ratio=max(hybrid_delta_sum,0)/max(hybrid_ref_sum,0.000000000000000001);
+  hybrid_burden_db=hybrid_ratio>0.000000000001?4.342944819032518*log(hybrid_ratio):-120;
+  hybrid_burden_db<=-20 ? hybrid_burden_target=1 : hybrid_burden_db>=-16 ? hybrid_burden_target=0 : (
+    hybrid_bt=hybrid_smooth01((hybrid_burden_db+20)/4);
+    hybrid_burden_target=1-hybrid_bt;
+  );
+);
+hybrid_burden_target<hybrid_burden_accept ? hybrid_burden_accept=hybrid_burden_target+hybrid_burden_attack*(hybrid_burden_accept-hybrid_burden_target) : hybrid_burden_accept=hybrid_burden_target+hybrid_burden_release*(hybrid_burden_accept-hybrid_burden_target);
+hybrid_burden_accept=clamp(hybrid_burden_accept,0,1);
+hybrid_burden[hybrid_write]=hybrid_burden_accept;
+hybrid_removed=max(abs(hybrid_delta_l),abs(hybrid_delta_r));
+hybrid_active=hybrid_removed>hybrid_limit*0.001;
+hybrid_new_event=hybrid_active&&!hybrid_candidate_prev;
+hybrid_end_event=!hybrid_active&&hybrid_candidate_prev;
+hybrid_new_event ? (
+  hybrid_event_start_abs=hybrid_clock;
+  hybrid_event_start_ring=hybrid_write;
+  hybrid_event_corr=hybrid_corr(hybrid_clock);
+  hybrid_onset3=hybrid_onset2; hybrid_onset2=hybrid_onset1; hybrid_onset1=hybrid_clock;
+);
+hybrid_end_event&&hybrid_event_start_abs>=0 ? (
+  hybrid_duration=hybrid_clock-hybrid_event_start_abs;
+  hybrid_duration_ms=hybrid_duration*1000/srate_safe;
+  hybrid_low_gate=hybrid_smooth01((hybrid_duration_ms-0.45)/0.15);
+  hybrid_high_gate=1-hybrid_smooth01((hybrid_duration_ms-1.50)/0.50);
+  hybrid_tonal_gate=hybrid_event_corr>=0.970?0:1;
+  hybrid_event_accept=hybrid_low_gate*hybrid_high_gate*hybrid_tonal_gate;
+  hybrid_duration>hybrid_classifier_spl ? hybrid_event_accept=0;
+  j=0; hybrid_fill=hybrid_event_start_ring;
+  loop(min(hybrid_duration,hybrid_buf_len-1),
+    hybrid_eventgate[hybrid_fill]=hybrid_event_accept;
+    hybrid_fill+=1; hybrid_fill>=hybrid_buf_len?hybrid_fill=0; j+=1;
+  );
+  hybrid_event_start_abs=-1;
+);
+hybrid_candidate_prev=hybrid_active;
+hybrid_class_read=hybrid_write-hybrid_classifier_spl; hybrid_class_read<0?hybrid_class_read+=hybrid_buf_len;
+hybrid_accept=min(hybrid_burden[hybrid_class_read],hybrid_eventgate[hybrid_class_read]);
+hybrid_accept=min(hybrid_accept,hybrid_sat_ceiling);
+hybrid_class_raw_l=hybrid_raw_l[hybrid_class_read]; hybrid_class_raw_r=hybrid_raw_r[hybrid_class_read];
+hybrid_class_cand_l=hybrid_candidate_l[hybrid_class_read]; hybrid_class_cand_r=hybrid_candidate_r[hybrid_class_read];
+hybrid_class_shaved_l=hybrid_class_raw_l+(hybrid_class_cand_l-hybrid_class_raw_l)*hybrid_accept;
+hybrid_class_shaved_r=hybrid_class_raw_r+(hybrid_class_cand_r-hybrid_class_raw_r)*hybrid_accept;
+hybrid_shaved_l[hybrid_class_read]=hybrid_class_shaved_l; hybrid_shaved_r[hybrid_class_read]=hybrid_class_shaved_r;
+hybrid_class_lim=hybrid_worklim[hybrid_class_read];
+hybrid_det=max(abs(hybrid_class_shaved_l),abs(hybrid_class_shaved_r));
+hybrid_required[hybrid_class_read]=hybrid_det>hybrid_class_lim?hybrid_class_lim/max(hybrid_det,0.000000000001):1;
+hybrid_required_active[hybrid_class_read]=hybrid_required[hybrid_class_read]<1?1:0;
+!hybrid_limiter_window_tracked ? (
+  hybrid_limiter_active_count=0;
+  hd=0; loop(hybrid_limiter_spl+1,
+    hi=hybrid_out_read+hd; hi>=hybrid_buf_len?hi-=hybrid_buf_len;
+    hybrid_limiter_active_count+=hybrid_required_active[hi]?1:0;
+    hd+=1;
+  );
+  hybrid_limiter_window_tracked=1;
+) : (
+  hi=hybrid_out_read-1; hi<0?hi+=hybrid_buf_len;
+  hybrid_required_active[hi]?hybrid_limiter_active_count-=1;
+  hybrid_required_active[hybrid_class_read]?hybrid_limiter_active_count+=1;
+);
+hybrid_target=1;
+hybrid_limiter_spl>0 && hybrid_limiter_active_count>0 ? (
+  hd=0; loop(hybrid_limiter_spl+1,
+    hi=hybrid_out_read+hd; hi>=hybrid_buf_len?hi-=hybrid_buf_len;
+    hreq=hybrid_required[hi]; hu=hd/hybrid_limiter_spl; hs=hu*hu*(3-2*hu);
+    hgain=hreq+(1-hreq)*hs; hybrid_target=min(hybrid_target,hgain); hd+=1;
+  );
+) : hybrid_limiter_spl<=0 ? hybrid_target=hybrid_required[hybrid_out_read];
+hybrid_target<hybrid_gain ? hybrid_gain=hybrid_target : hybrid_gain=hybrid_target+hybrid_limiter_release*(hybrid_gain-hybrid_target);
+hybrid_gain>0.999999999?hybrid_gain=1;
+hybrid_out_l=hybrid_shaved_l[hybrid_out_read]*hybrid_gain*hybrid_makeup[hybrid_out_read];
+hybrid_out_r=hybrid_shaved_r[hybrid_out_read]*hybrid_gain*hybrid_makeup[hybrid_out_read];
+hybrid_delayed_legacy_l=hybrid_raw_l[hybrid_out_read];
+hybrid_delayed_legacy_r=hybrid_raw_r[hybrid_out_read];
+hybrid_mix_now=stream_hybrid_mix;
+hybrid_mix_now <= 0.0000001 ? (
+  final_section_proc_l=hybrid_delayed_legacy_l;
+  final_section_proc_r=hybrid_delayed_legacy_r;
+) : hybrid_mix_now >= 0.9999999 ? (
+  final_section_proc_l=hard_limit(hybrid_out_l,ceiling);
+  final_section_proc_r=hard_limit(hybrid_out_r,ceiling);
+) : (
+  final_section_proc_l=hard_limit(hybrid_delayed_legacy_l+(hybrid_out_l-hybrid_delayed_legacy_l)*hybrid_mix_now,ceiling);
+  final_section_proc_r=hard_limit(hybrid_delayed_legacy_r+(hybrid_out_r-hybrid_delayed_legacy_r)*hybrid_mix_now,ceiling);
+);
+hybrid_write+=1; hybrid_write>=hybrid_buf_len?hybrid_write=0;
+hybrid_clock+=1;
+  );
+) : (
+  final_section_proc_l=legacy_final_l;
+  final_section_proc_r=legacy_final_r;
+);
 
-normal_out_l = final_section_proc_l;
-normal_out_r = final_section_proc_r;
+meter_final_safety_post = absmax2(final_section_proc_l, final_section_proc_r);
+meter_blk_safety_pre = max(meter_blk_safety_pre, meter_final_safety_pre);
+meter_blk_safety_post = max(meter_blk_safety_post, meter_final_safety_post);
+meter_heavy_tick ? (
+  meter_final_safety_now_db = max(0, meter_to_db(meter_blk_safety_pre) - meter_to_db(meter_blk_safety_post));
+  meter_note_activity(7, meter_final_safety_now_db);
+  meter_blk_safety_pre = meter_blk_safety_post = 0;
+);
 
-spl0 = normal_out_l;
-spl1 = normal_out_r;
+final_ref_l = final_delta_ref_pre_l;
+final_ref_r = final_delta_ref_pre_r;
+effective_final_lookahead > 0 ? (
+  dfrdpos = diag_final_wrpos - effective_final_lookahead;
+  dfrdpos < 0 ? dfrdpos += diag_final_buf_len;
+  final_ref_l = diag_final_l[dfrdpos];
+  final_ref_r = diag_final_r[dfrdpos];
+  diag_final_l[diag_final_wrpos] = final_delta_ref_pre_l;
+  diag_final_r[diag_final_wrpos] = final_delta_ref_pre_r;
+  diag_final_wrpos += 1;
+  diag_final_wrpos >= diag_final_buf_len ? diag_final_wrpos = 0;
+);
 
-gui_peak_in_l_sample = max(gui_peak_in_l_sample, abs(input_section_in_l));
-gui_peak_in_r_sample = max(gui_peak_in_r_sample, abs(input_section_in_r));
+final_section_mode == 1 ? (
+  diag_l = final_section_proc_l;
+  diag_r = final_section_proc_r;
+  diag_active = 1;
+) : final_section_mode == 2 ? (
+  diag_l = final_section_proc_l - final_ref_l;
+  diag_r = final_section_proc_r - final_ref_r;
+  diag_active = 1;
+);
 
+final_section_mode == 3 ? (
+  normal_out_l = final_section_in_l;
+  normal_out_r = final_section_in_r;
+) : (
+  normal_out_l = final_section_proc_l;
+  normal_out_r = final_section_proc_r;
+);
 
-@gfx 600 300
+meter_out_peak_l = max(meter_out_peak_l, abs(normal_out_l));
+meter_out_peak_r = max(meter_out_peak_r, abs(normal_out_r));
+meter_out_mid = (normal_out_l + normal_out_r) * 0.5;
+meter_out_side = (normal_out_l - normal_out_r) * 0.5;
+meter_out_mid_peak = max(meter_out_mid_peak, abs(meter_out_mid));
+meter_out_side_peak = max(meter_out_side_peak, abs(meter_out_side));
 
-gui_scale = min(gfx_w / 600, gfx_h / 300);
-gui_scale = max(gui_scale, 0.25);
-gui_scale = min(gui_scale, 2);
-gui_layout_w = gfx_w / gui_scale;
-gui_layout_h = gfx_h / gui_scale;
-gui_dx = 0;
-gui_dy = 0;
+meter_refresh_count += 1;
+meter_refresh_count >= 8192 ? (
+  refresh_meter_readout();
+  meter_refresh_count = 0;
+);
 
-gfx_setfont(1, "Arial", max(5, floor(11 * gui_scale)));
-gfx_setfont(2, "Arial", max(5, floor(11 * gui_scale)), 'b');
-gfx_setfont(3, "Arial", max(5, floor(9 * gui_scale)));
-gfx_setfont(4, "Arial", max(8, floor(16 * gui_scale)), 'b');
-gfx_setfont(5, "Arial", max(5, floor(10 * gui_scale)));
-gfx_setfont(6, "Arial", max(5, floor(9 * gui_scale)), 'b');
+diag_active ? (
+  spl0 = diag_l;
+  spl1 = diag_r;
+) : (
+  spl0 = normal_out_l;
+  spl1 = normal_out_r;
+);
 
-function set_hex_color(hex a) local(r g b)
+gui_peak_in_l_sample = max(gui_peak_in_l_sample, abs(agc_section_in_l));
+gui_peak_in_r_sample = max(gui_peak_in_r_sample, abs(agc_section_in_r));
+gui_peak_out_l_sample = max(gui_peak_out_l_sample, abs(spl0));
+gui_peak_out_r_sample = max(gui_peak_out_r_sample, abs(spl1));
+
+@gfx 620 262
+
+gfx_setfont(1, "Arial", 11);
+gfx_setfont(2, "Arial", 11, 'b');
+gfx_setfont(3, "Arial", 9);
+gfx_setfont(4, "Arial", 18, 'b');
+gfx_setfont(5, "Arial", 10);
+gfx_setfont(6, "Arial", 24, 'b');
+
+function gui_color(r g b a)
 (
-  r = ((hex >> 16) & 255) / 255;
-  g = ((hex >> 8) & 255) / 255;
-  b = (hex & 255) / 255;
   gfx_r = r; gfx_g = g; gfx_b = b; gfx_a = a;
 );
 
-function ui_x(v) ( gui_dx + v * gui_scale; );
-function ui_y(v) ( gui_dy + v * gui_scale; );
-function ui_s(v) ( v * gui_scale; );
+function gui_fill(x y w h r g b a)
+(
+  gui_color(r,g,b,a);
+  gfx_rect(x,y,w,h,1);
+);
+
+function gui_frame(x y w h r g b a)
+(
+  gui_color(r,g,b,a);
+  gfx_rect(x,y,w,h,0);
+);
+
+function gui_hit(x y w h)
+(
+  mouse_x >= x && mouse_x <= x+w && mouse_y >= y && mouse_y <= y+h;
+);
 
 function core_mode_name(dest)
 (
@@ -1908,35 +3607,36 @@ function core_mode_name(dest)
                    strcpy(dest, "Smooth Limiter");
 );
 
-function gui_draw_mode(x y w h) local(hover mouse_down choice text_w text_h)
+function gui_draw_mode(x y w h) local(hover mouse_down choice accent_r accent_g accent_b)
 (
-  x = ui_x(x);
-  y = ui_y(y);
-  w *= gui_scale;
-  h *= gui_scale;
-  hover = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
+  hover = gui_hit(x,y,w,h);
   mouse_down = mouse_cap & 1;
 
-  set_hex_color(hover ? gui_theme_panel : gui_theme_bg, 1);
-  gfx_rect(x, y, w, h, 1);
-  set_hex_color(hover ? gui_theme_accent : gui_theme_border, 1);
-  gfx_rect(x, y, w, h, 0);
+  core_mode == 0 ? ( accent_r = 0.82; accent_g = 0.65; accent_b = 0.32; ) :
+  core_mode == 1 ? ( accent_r = 0.40; accent_g = 0.62; accent_b = 0.88; ) :
+                   ( accent_r = 0.58; accent_g = 0.62; accent_b = 0.68; );
+
+  gui_fill(x,y,w,h, 0.105,0.125,0.155,1);
+  hover ? (
+    gui_frame(x,y,w,h, accent_r, accent_g, accent_b, 1);
+  ) : (
+    gui_frame(x,y,w,h, accent_r * 0.55, accent_g * 0.55, accent_b * 0.55, 1);
+  );
 
   core_mode_name(#core_mode_text);
-  set_hex_color(gui_theme_text, 1);
+  gui_color(0.88,0.91,0.96,1);
   gfx_setfont(2);
-  gfx_measurestr(#core_mode_text, text_w, text_h);
-  gfx_x = x + ui_s(12);
-  gfx_y = y + (h - text_h) * 0.5;
+  gfx_measurestr(#core_mode_text, mode_w, mode_h);
+  gfx_x = x + 14;
+  gfx_y = y + (h - mode_h) * 0.5;
   gfx_drawstr(#core_mode_text);
 
-  set_hex_color(gui_theme_accent, 1);
-  gfx_x = x + w - ui_s(19);
-  gfx_y = y + h * 0.5 - ui_s(3);
-  gfx_line(gfx_x, gfx_y, gfx_x + ui_s(4), gfx_y + ui_s(4), max(1, floor(gui_scale)));
-  gfx_line(gfx_x + ui_s(4), gfx_y + ui_s(4), gfx_x + ui_s(8), gfx_y, max(1, floor(gui_scale)));
+  gui_color(accent_r * 0.85, accent_g * 0.85, accent_b * 0.85, 1);
+  gfx_x = x + w - 20;
+  gfx_y = y + h * 0.5 - 3;
+  gfx_line(gfx_x, gfx_y, gfx_x + 5, gfx_y + 5, 1);
+  gfx_line(gfx_x + 5, gfx_y + 5, gfx_x + 10, gfx_y, 1);
 
-  hover ? sprintf(#gui_hover_info, "Mode | %s", #core_mode_text);
   hover && mouse_down && !gui_last_mouse_down ? (
     gfx_x = x;
     gfx_y = y + h;
@@ -1948,20 +3648,17 @@ function gui_draw_mode(x y w h) local(hover mouse_down choice text_w text_h)
   );
 );
 
-function gui_draw_slider(x y w slider_idx label min_val max_val) local(track_y hover mouse_down val pct new_val fill_w handle_x value_w value_h)
+function gui_draw_slider(x y w slider_idx label min_val max_val default_val unit) local(track_y hover mouse_down val pct new_val fill_w handle_x value_w value_h)
 (
-  x = ui_x(x);
-  y = ui_y(y);
-  w *= gui_scale;
-  track_y = y + ui_s(25);
-  hover = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + ui_s(40);
+  track_y = y + 28;
+  hover = gui_hit(x, y, w, 48);
   mouse_down = mouse_cap & 1;
 
   hover && mouse_down && !gui_last_mouse_down && gui_active_slider == -1 ? gui_active_slider = slider_idx;
   !mouse_down && gui_active_slider == slider_idx ? gui_active_slider = -1;
 
   gui_active_slider == slider_idx ? (
-    pct = clamp((mouse_x - x) / max(w, 1), 0, 1);
+    pct = clamp((mouse_x - x) / max(w,1), 0, 1);
     new_val = min_val + (max_val - min_val) * pct;
     slider_idx == 2 ? new_val = floor(new_val * 10 + 0.5) / 10 : new_val = floor(new_val + 0.5);
     slider(slider_idx) = new_val;
@@ -1973,283 +3670,147 @@ function gui_draw_slider(x y w slider_idx label min_val max_val) local(track_y h
   fill_w = w * pct;
   handle_x = x + fill_w;
 
-  set_hex_color(gui_theme_text_muted, 1);
+  gui_color(0.78,0.82,0.90,1);
   gfx_setfont(1);
   gfx_x = x;
   gfx_y = y;
   gfx_drawstr(label);
 
-  slider_idx == 2 ? sprintf(#core_value, "%.1f dB", val) : sprintf(#core_value, "%.0f%%", val);
-  set_hex_color(gui_theme_text, 1);
+  slider_idx == 2 ? sprintf(#core_value, "%.1f dB", val) : sprintf(#core_value, "%.0f percent", val);
   gfx_setfont(2);
   gfx_measurestr(#core_value, value_w, value_h);
   gfx_x = x + w - value_w;
   gfx_y = y;
   gfx_drawstr(#core_value);
 
-  set_hex_color(gui_theme_border, 1);
-  gfx_rect(x, track_y, w, ui_s(6), 1);
-  set_hex_color(gui_theme_accent, 0.78);
-  gfx_rect(x, track_y, fill_w, ui_s(6), 1);
-  set_hex_color(hover || gui_active_slider == slider_idx ? 0xFFFFFF : gui_theme_accent, 1);
-  gfx_circle(handle_x, track_y + ui_s(3), ui_s(6), 1, 1);
+  gui_fill(x, track_y, w, 7, 0.12,0.14,0.18,1);
+  gui_fill(x, track_y, fill_w, 7, 0.45,0.58,0.82,1);
+  gui_frame(x, track_y, w, 7, 0.24,0.28,0.36,1);
 
-  hover ? (
-    slider_idx == 2 ? sprintf(#gui_hover_info, "Input Drive | %.1f dB", val) :
-                      sprintf(#gui_hover_info, "Auto-Adapt | %.0f percent", val);
+  gui_color(hover || gui_active_slider == slider_idx ? 0.94 : 0.74, hover || gui_active_slider == slider_idx ? 0.96 : 0.79, hover || gui_active_slider == slider_idx ? 1.00 : 0.90, 1);
+  gfx_circle(handle_x, track_y + 3.5, 7, 1, 1);
+
+  slider_idx == 3 ? (
+    gui_color(0.48,0.54,0.66,1);
+    gfx_setfont(3);
+    gfx_x = x;
+    gfx_y = track_y + 14;
+    gfx_drawstr("0 percent = neutral");
   );
 );
 
-function gui_draw_peak_tick(x y w h tick_db) local(tick_y tick_w)
+function gui_draw_meter(x y w h level_l level_r label peak_hold_ptr) local(level peak_db pct fill_l fill_r bar_w db_w db_h tick_y tick_db i hold_pct hold_y)
 (
-  tick_y = y + h - ui_s(2) - floor((h - ui_s(4)) * clamp((tick_db + 60) / 66, 0, 1));
-  tick_w = tick_db == 0 ? max(1, floor(ui_s(2))) : max(1, floor(gui_scale));
-  set_hex_color(gui_theme_border, tick_db == 0 ? 1 : (tick_db == -12 ? 0.72 : 0.45));
-  gfx_line(x + ui_s(1), tick_y, x + w - ui_s(2), tick_y, tick_w);
-);
+  gui_fill(x,y,w,h, 0.08,0.10,0.13,1);
+  gui_frame(x,y,w,h, 0.22,0.26,0.34,1);
 
-function gui_draw_gr_tick(x y w h tick_db) local(tick_y tick_w)
-(
-  tick_y = y + ui_s(2) + floor((h - ui_s(4)) * clamp(tick_db / 24, 0, 1));
-  tick_w = (tick_db == 12 || tick_db == 24) ? max(1, floor(ui_s(2))) : max(1, floor(gui_scale));
-  set_hex_color(gui_theme_border, tick_db == 12 ? 0.85 : (tick_db == 24 ? 1 : 0.45));
-  gfx_line(x + ui_s(1), tick_y, x + w - ui_s(2), tick_y, tick_w);
-);
+  bar_w = (w - 9) * 0.5;
+  peak_db = lin2db(max(level_l, level_r));
+  pct = clamp((peak_db + 60) / 60, 0, 1);
+  fill_l = h * clamp((lin2db(level_l) + 60) / 60, 0, 1);
+  fill_r = h * clamp((lin2db(level_r) + 60) / 60, 0, 1);
 
-function gui_draw_peak_meter(x y w h level_l level_r label peak_hold_ptr) local(db_l db_r peak_db pct_l pct_r fill_l fill_r bar_w hold_pct hold_y label_w label_h db_w db_h hover)
-(
-  x = ui_x(x);
-  y = ui_y(y);
-  w *= gui_scale;
-  h *= gui_scale;
-  db_l = lin2db(level_l);
-  db_r = lin2db(level_r);
-  peak_db = max(db_l, db_r);
-  pct_l = clamp((db_l + 60) / 66, 0, 1);
-  pct_r = clamp((db_r + 60) / 66, 0, 1);
-  fill_l = floor((h - ui_s(4)) * pct_l);
-  fill_r = floor((h - ui_s(4)) * pct_r);
-  bar_w = floor((w - ui_s(6)) * 0.5);
-  hover = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
+  gui_fill(x+3, y+h-fill_l-2, bar_w, fill_l, 0.42,0.58,0.82,1);
+  gui_fill(x+6+bar_w, y+h-fill_r-2, bar_w, fill_r, 0.42,0.58,0.82,1);
 
-  set_hex_color(gui_theme_panel, 1);
-  gfx_rect(x, y, w, h, 1);
-  set_hex_color(gui_theme_border, 1);
-  gfx_rect(x, y, w, h, 0);
-
-  set_hex_color(db_l > 0 ? gui_theme_danger : (db_l > -12 ? gui_theme_warning : gui_theme_safe), 1);
-  gfx_rect(x + ui_s(2), y + h - ui_s(2) - fill_l, bar_w, fill_l, 1);
-  set_hex_color(db_r > 0 ? gui_theme_danger : (db_r > -12 ? gui_theme_warning : gui_theme_safe), 1);
-  gfx_rect(x + ui_s(4) + bar_w, y + h - ui_s(2) - fill_r, bar_w, fill_r, 1);
-
-  gui_draw_peak_tick(x, y, w, h, -24);
-  gui_draw_peak_tick(x, y, w, h, -12);
-  gui_draw_peak_tick(x, y, w, h, -6);
-  gui_draw_peak_tick(x, y, w, h, 0);
+  i = 0;
+  loop(5,
+    tick_db = i == 0 ? -48 : i == 1 ? -24 : i == 2 ? -12 : i == 3 ? -6 : 0;
+    tick_y = y + h - h * clamp((tick_db + 60) / 60, 0, 1) - 2;
+    gui_color(0.32, 0.36, 0.44, 0.7);
+    gfx_line(x + 2, tick_y, x + w - 3, tick_y, 0);
+    i += 1;
+  );
 
   peak_hold_ptr[] = max(peak_db, peak_hold_ptr[] - 0.35);
-  hold_pct = clamp((peak_hold_ptr[] + 60) / 66, 0, 1);
-  hold_y = y + h - ui_s(2) - floor((h - ui_s(4)) * hold_pct);
-  set_hex_color(peak_hold_ptr[] > 0 ? gui_theme_danger : (peak_hold_ptr[] > -12 ? gui_theme_warning : gui_theme_safe), 1);
-  gfx_rect(x + ui_s(2), hold_y, w - ui_s(4), max(1, floor(ui_s(2))), 1);
+  hold_pct = clamp((peak_hold_ptr[] + 60) / 60, 0, 1);
+  hold_pct > 0.001 ? (
+    hold_y = y + h - h * hold_pct - 2;
+    gui_color(0.92, 0.78, 0.38, 0.9);
+    gfx_line(x + 2, hold_y, x + w - 3, hold_y, 0);
+  );
 
-  set_hex_color(gui_theme_text_muted, 1);
+  gui_color(0.70,0.75,0.84,1);
   gfx_setfont(5);
-  gfx_measurestr(label, label_w, label_h);
-  gfx_x = x + (w - label_w) * 0.5;
-  gfx_y = y + h + ui_s(4);
+  gfx_measurestr(label, db_w, db_h);
+  gfx_x = x + (w - db_w) * 0.5;
+  gfx_y = y + h + 5;
   gfx_drawstr(label);
 
-  sprintf(#core_db, "%.0f", peak_db);
-  set_hex_color(gui_theme_text, 1);
-  gfx_setfont(6);
+  sprintf(#core_db, "%.1f", peak_db);
+  gfx_setfont(3);
   gfx_measurestr(#core_db, db_w, db_h);
   gfx_x = x + (w - db_w) * 0.5;
-  gfx_y = y + h - db_h - ui_s(4);
+  gfx_y = y + h - db_h - 5;
   gfx_drawstr(#core_db);
-
-  hover ? sprintf(#gui_hover_info, "Input peak | L %.1f dBFS / R %.1f dBFS", db_l, db_r);
 );
-
-function gui_draw_gr_meter(x y w h value_db label) local(pct fill_h label_w label_h db_w db_h hover gr_color)
-(
-  x = ui_x(x);
-  y = ui_y(y);
-  w *= gui_scale;
-  h *= gui_scale;
-  value_db = max(value_db, 0);
-  pct = clamp(value_db / 24, 0, 1);
-  fill_h = floor((h - ui_s(4)) * pct);
-  hover = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
-
-  set_hex_color(gui_theme_panel, 1);
-  gfx_rect(x, y, w, h, 1);
-  set_hex_color(gui_theme_border, 1);
-  gfx_rect(x, y, w, h, 0);
-
-  gr_color = value_db > 18 ? gui_theme_danger : (value_db > 12 ? gui_theme_warning : gui_theme_activity);
-  set_hex_color(gr_color, 1);
-  gfx_rect(x + ui_s(2), y + ui_s(2), w - ui_s(4), fill_h, 1);
-  gui_draw_gr_tick(x, y, w, h, 0);
-  gui_draw_gr_tick(x, y, w, h, 6);
-  gui_draw_gr_tick(x, y, w, h, 12);
-  gui_draw_gr_tick(x, y, w, h, 18);
-  gui_draw_gr_tick(x, y, w, h, 24);
-
-  set_hex_color(gui_theme_text_muted, 1);
-  gfx_setfont(5);
-  gfx_measurestr(label, label_w, label_h);
-  gfx_x = x + (w - label_w) * 0.5;
-  gfx_y = y + h + ui_s(4);
-  gfx_drawstr(label);
-
-  value_db > 0.05 ? sprintf(#core_db, "-%.0f", value_db) : strcpy(#core_db, "0");
-  set_hex_color(value_db > 0.05 ? 0xFFE0B5 : gui_theme_text_muted, 1);
-  gfx_setfont(6);
-  gfx_measurestr(#core_db, db_w, db_h);
-  gfx_x = x + (w - db_w) * 0.5;
-  gfx_y = y + h - db_h - ui_s(4);
-  gfx_drawstr(#core_db);
-
-  hover ? sprintf(#gui_hover_info, "%s gain reduction | %.1f dB", label, value_db);
-);
-
-
 
 mouse_down = mouse_cap & 1;
-strcpy(#gui_hover_info, "");
+canvas_w = 620;
+canvas_h = 262;
+gui_dx = max(0, floor((gfx_w - canvas_w) * 0.5));
+gui_dy = max(0, floor((gfx_h - canvas_h) * 0.5));
 
-gui_peak_in_l = max(gui_peak_in_l_sample, gui_peak_in_l * 0.93);
-gui_peak_in_r = max(gui_peak_in_r_sample, gui_peak_in_r * 0.93);
+gui_peak_in_l = max(gui_peak_in_l * 0.82, gui_peak_in_l_sample);
+gui_peak_in_r = max(gui_peak_in_r * 0.82, gui_peak_in_r_sample);
+gui_peak_out_l = max(gui_peak_out_l * 0.82, gui_peak_out_l_sample);
+gui_peak_out_r = max(gui_peak_out_r * 0.82, gui_peak_out_r_sample);
 gui_peak_in_l_sample = 0;
 gui_peak_in_r_sample = 0;
+gui_peak_out_l_sample = 0;
+gui_peak_out_r_sample = 0;
 
-gui_gr_agc_now = max(0, -lin2db(max(min(agc_low_eff_gain, agc_high_eff_gain), 0.000001)));
-gui_gr_density_now = max(0, -lin2db(max(min(g1, min(g2, min(g3, min(g4, min(g5, g6))))), 0.000001)));
-gui_final_gain = min(final_threshold_guard_gain, min(dynamic_clip_gain, pre_tgain));
-gui_gr_final_now = max(0, -lin2db(max(gui_final_gain, 0.000001)));
-gui_gr_agc = max(gui_gr_agc_now, gui_gr_agc * 0.90);
-gui_gr_density = max(gui_gr_density_now, gui_gr_density * 0.90);
-gui_gr_final = max(gui_gr_final_now, gui_gr_final * 0.90);
+gui_fill(0,0,gfx_w,gfx_h, 0.055,0.065,0.085,1);
 
-set_hex_color(gui_theme_bg, 1);
-gfx_rect(0, 0, gfx_w, gfx_h, 1);
+gx = gui_dx;
+gy = gui_dy;
 
-layout_margin = gui_layout_w < 420 ? 10 : 18;
-layout_gap = gui_layout_w < 420 ? 8 : 12;
-header_h = gui_layout_h < 220 ? 34 : 45;
-footer_h = gui_layout_h < 190 ? 0 : 32;
-content_top = header_h + (gui_layout_h < 220 ? 6 : 15);
-footer_y = gui_layout_h - footer_h;
-content_bottom = footer_y - (footer_h > 0 ? 10 : 6);
-content_h = max(80, content_bottom - content_top);
-layout_stacked = gfx_w < gfx_h * 1.45;
-
-layout_stacked ? (
-  controls_x = layout_margin;
-  controls_y = content_top;
-  controls_w = gui_layout_w - layout_margin * 2;
-  controls_h = min(240, max(170, content_h * 0.36));
-  activity_x = layout_margin;
-  activity_y = controls_y + controls_h + layout_gap;
-  activity_w = controls_w;
-  activity_h = max(80, content_bottom - activity_y);
-) : (
-  available_w = gui_layout_w - layout_margin * 2 - layout_gap;
-  controls_x = layout_margin;
-  controls_y = content_top;
-  controls_w = available_w * 0.58;
-  controls_h = content_h;
-  activity_x = controls_x + controls_w + layout_gap;
-  activity_y = content_top;
-  activity_w = gui_layout_w - layout_margin - activity_x;
-  activity_h = content_h;
-);
-
-set_hex_color(gui_theme_panel, 1);
-gfx_rect(ui_x(0), ui_y(0), ui_s(gui_layout_w), ui_s(header_h), 1);
-set_hex_color(gui_theme_border, 1);
-gfx_line(ui_x(0), ui_y(header_h), ui_x(gui_layout_w), ui_y(header_h), max(1, floor(gui_scale)));
-
-set_hex_color(gui_theme_accent, 1);
+gui_fill(gx,gy,canvas_w,50, 0.08,0.10,0.14,1);
+gui_frame(gx,gy,canvas_w,50, 0.18,0.22,0.30,1);
+gui_color(0.92,0.95,1,1);
 gfx_setfont(4);
-gfx_x = ui_x(15);
-gfx_y = ui_y(header_h < 40 ? 7 : 10);
+gfx_x = gx + 18;
+gfx_y = gy + 11;
 gfx_drawstr("OPTILAB CORE");
-header_h >= 40 && gui_layout_w >= 390 ? (
-  set_hex_color(gui_theme_text_muted, 1);
-  gfx_setfont(1);
-  gfx_x = ui_x(15);
-  gfx_y = ui_y(28);
-  gfx_drawstr("broadcast leveling, density and final control");
-);
+gui_color(0.58,0.64,0.75,1);
+gfx_setfont(5);
+gfx_x = gx + 20;
+gfx_y = gy + 33;
+gfx_drawstr("broadcast-style leveling, polish, and peak control");
 
-set_hex_color(gui_theme_panel, 0.4);
-gfx_rect(ui_x(controls_x), ui_y(controls_y), ui_s(controls_w), ui_s(controls_h), 1);
-set_hex_color(gui_theme_border, 1);
-gfx_rect(ui_x(controls_x), ui_y(controls_y), ui_s(controls_w), ui_s(controls_h), 0);
-set_hex_color(gui_theme_accent, 1);
+gui_fill(gx + 18, gy + 68, 355, 178, 0.075,0.09,0.12,1);
+gui_frame(gx + 18, gy + 68, 355, 178, 0.18,0.22,0.30,1);
+gui_color(0.76,0.82,0.92,1);
 gfx_setfont(2);
-gfx_x = ui_x(controls_x + 14);
-gfx_y = ui_y(controls_y + 13);
-gfx_drawstr("CORE CONTROLS");
+gfx_x = gx + 34;
+gfx_y = gy + 82;
+gfx_drawstr("CONTROLS");
 
-controls_inner_x = controls_x + 14;
-controls_inner_w = controls_w - 28;
-control_mode_y = controls_y + 35;
-control_slider1_y = min(controls_y + controls_h - 93, controls_y + max(76, controls_h * 0.45));
-control_slider2_y = controls_y + controls_h - 48;
-gui_draw_mode(controls_inner_x, control_mode_y, controls_inner_w, 30);
-gui_draw_slider(controls_inner_x, control_slider1_y, controls_inner_w, 2, "Input Drive", -12, 18);
-gui_draw_slider(controls_inner_x, control_slider2_y, controls_inner_w, 3, "Auto-Adapt", 0, 100);
+gui_color(0.58,0.64,0.74,1);
+gfx_setfont(5);
+gfx_x = gx + 34;
+gfx_y = gy + 104;
+gfx_drawstr("Mode, input, and adaptation stay available as normal REAPER sliders.");
 
-set_hex_color(gui_theme_panel, 0.4);
-gfx_rect(ui_x(activity_x), ui_y(activity_y), ui_s(activity_w), ui_s(activity_h), 1);
-set_hex_color(gui_theme_border, 1);
-gfx_rect(ui_x(activity_x), ui_y(activity_y), ui_s(activity_w), ui_s(activity_h), 0);
-set_hex_color(gui_theme_accent, 1);
+gui_draw_mode(gx + 34, gy + 128, 210, 34);
+gui_draw_slider(gx + 34, gy + 177, 305, 2, "Input Drive", -12, 18, 0, "dB");
+gui_draw_slider(gx + 34, gy + 225, 305, 3, "Auto-Adapt", 0, 100, 0, "percent");
+
+gui_fill(gx + 392, gy + 68, 210, 178, 0.075,0.09,0.12,1);
+gui_frame(gx + 392, gy + 68, 210, 178, 0.18,0.22,0.30,1);
+gui_color(0.76,0.82,0.92,1);
 gfx_setfont(2);
-gfx_x = ui_x(activity_x + 14);
-gfx_y = ui_y(activity_y + 13);
-gfx_drawstr("CORE ACTIVITY");
+gfx_x = gx + 408;
+gfx_y = gy + 82;
+gfx_drawstr("PEAK VIEW");
 
-meter_top = activity_y + 36;
-meter_h = max(36, activity_h - 78);
-meter_area_x = activity_x + 21;
-meter_area_w = max(120, activity_w - 42);
-meter_w = min(40, max(22, meter_area_w * 0.11));
-peak_meter_w = meter_w + 2;
-meter_gap = max(6, (meter_area_w - peak_meter_w - meter_w * 3) / 3);
-meter_input_x = meter_area_x;
-meter_agc_x = meter_input_x + peak_meter_w + meter_gap;
-meter_density_x = meter_agc_x + meter_w + meter_gap;
-meter_final_x = meter_density_x + meter_w + meter_gap;
+gui_draw_meter(gx + 420, gy + 112, 48, 92, gui_peak_in_l, gui_peak_in_r, "Input", gui_peak_hold_in);
+gui_draw_meter(gx + 506, gy + 112, 48, 92, gui_peak_out_l, gui_peak_out_r, "Output", gui_peak_hold_out);
 
-gui_draw_peak_meter(meter_input_x, meter_top, peak_meter_w, meter_h, gui_peak_in_l, gui_peak_in_r, "Input", gui_peak_hold_in);
-gui_draw_gr_meter(meter_agc_x, meter_top, meter_w, meter_h, gui_gr_agc, "AGC");
-gui_draw_gr_meter(meter_density_x, meter_top, meter_w, meter_h, gui_gr_density, "Density");
-gui_draw_gr_meter(meter_final_x, meter_top, meter_w, meter_h, gui_gr_final, "Final");
-
-footer_h > 0 ? (
-  set_hex_color(gui_theme_panel, 1);
-  gfx_rect(ui_x(0), ui_y(footer_y), ui_s(gui_layout_w), ui_s(footer_h), 1);
-  set_hex_color(gui_theme_border, 1);
-  gfx_line(ui_x(0), ui_y(footer_y), ui_x(gui_layout_w), ui_y(footer_y), max(1, floor(gui_scale)));
-
-  gfx_setfont(5);
-  strlen(#gui_hover_info) > 0 ? (
-    set_hex_color(gui_theme_text, 1);
-    gfx_x = ui_x(15);
-    gfx_y = ui_y(footer_y + 10);
-    gfx_drawstr(#gui_hover_info);
-  ) : (
-    core_mode_name(#core_mode_text);
-    set_hex_color(gui_theme_text_muted, 1);
-    sprintf(#core_footer, "%s | ceiling -0.1 dBFS", #core_mode_text);
-    gfx_x = ui_x(15);
-    gfx_y = ui_y(footer_y + 10);
-    gfx_drawstr(#core_footer);
-  );
-);
+gui_color(0.52,0.58,0.68,1);
+gfx_setfont(3);
+gfx_x = gx + 416;
+gfx_y = gy + 222;
+gfx_drawstr("Ceiling target: -0.1 dBFS");
 
 gui_last_mouse_down = mouse_down;
