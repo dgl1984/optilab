@@ -23,15 +23,14 @@ native/build/Release/OptiLab_Core.clap
 Create a version-checked candidate ZIP and SHA-256 file with:
 
 ```powershell
-./scripts/package-clap.ps1
+./scripts/package-all.ps1
 ```
 
 CI verifies that the module is x64, exports `clap_entry`, and has no dynamic
 Microsoft C/C++ runtime dependency before uploading the candidate artifact.
 For version tags, the release job downloads that exact tested artifact and
-publishes its ZIP with the installable JSFX and Winamp assets. Checksums and
-developer documentation remain in CI/package staging rather than cluttering the
-public release page.
+publishes the unified release package `OptiLab-Core-1.3.0.zip` along with the
+direct plug-in assets.
 
 The CLAP smoke test loads the built module through `clap_entry` and verifies:
 

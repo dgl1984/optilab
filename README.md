@@ -84,7 +84,7 @@ what you have — no extraction needed:
 
 ## CLAP installation
 
-1. Download and extract `OptiLab-Core-1.3.0-CLAP-x64.zip`.
+1. Download `OptiLab-Core-1.3.0.zip` (and extract `OptiLab_Core.clap`), or download `OptiLab_Core.clap` directly.
 2. Close the CLAP host.
 3. Copy `OptiLab_Core.clap` to
    `%LOCALAPPDATA%\Programs\Common\CLAP`.
@@ -99,7 +99,7 @@ The Windows DLL uses the classic 32-bit Winamp DSP/Effect interface. It can be
 used by Winamp and by compatible Windows broadcast applications that support
 Winamp DSP plug-ins.
 
-1. Download and extract the Winamp DSP ZIP from the latest release.
+1. Download `OptiLab-Core-1.3.0.zip` (and extract `dsp_optilab_core.dll`), or download `dsp_optilab_core.dll` directly.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
 4. Restart the host and select **OptiLab Core 1.3.0** in its DSP configuration.

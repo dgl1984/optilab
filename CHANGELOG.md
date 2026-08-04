@@ -26,7 +26,9 @@ Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially re
 - OptiLab Core v1.3.0 and later are source-available under the Apache License 2.0 with the Commons Clause License Condition v1.0.
 - Commercial use of OptiLab Core **as an audio-processing tool** is explicitly permitted, including paid production, mastering, broadcasting, streaming, podcasting, and other monetized audio work. No royalty is owed on audio processed with OptiLab Core.
 - Selling OptiLab Core itself, or a product or service whose value derives entirely or substantially from OptiLab Core's software functionality, requires separate permission from Lanes Audio.
-- Earlier releases remain under the license terms under which they were originally published.\n\n## OptiLab Core v1.2.0
+- Earlier releases remain under the license terms under which they were originally published.
+
+## OptiLab Core v1.2.0
 
 This release adds the first public 64-bit Windows CLAP build, corrects a
 user-reported fade at the beginning of playback, and carries OptiLab Core's
@@ -211,7 +213,7 @@ Older startup peak-catch behavior has been retired. This helps Core rely more na
 
 ### Screen-reader wording improvement
 
-The Stream mode is now written as **Stream polish** instead of **Stream Polish**. This avoids a confusing pronunciation issue in some screen readers and text-to-speech voices, where the capitalized word could be read as â€œPolishâ€ referring to Poland rather than â€œpolishâ€ as in audio polish.
+The Stream mode is now written as **Stream polish** instead of **Stream Polish**. This avoids a confusing pronunciation issue in some screen readers and text-to-speech voices, where the capitalized word could be read as "Polish" referring to Poland rather than "polish" as in audio polish.
 
 ### Smooth Limiter unchanged
 

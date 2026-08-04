@@ -25,8 +25,7 @@ drawing, unlabeled graphics, or mouse-only controls.
 - **Restore Defaults:** Podcast Leveler, +3.5 dB, and 0 percent
 
 When switching modes, the Winamp DSP uses host-calibrated starting Input values.
-Stream polish starts at `+1.0 dB`, which is gentler than the REAPER JSFX default
-and better matched to Winamp-compatible integer PCM hosts.
+Stream polish starts at `+1.0 dB`, which is tailored for Winamp-compatible integer PCM hosts.
 
 Settings are stored separately for each host application under:
 
@@ -41,7 +40,7 @@ No administrator access is needed to save settings.
 1. Close the audio host.
 2. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
 3. Restart the host.
-4. Open its DSP/Effect configuration and select **OptiLab Core 1.2.0**.
+4. Open its DSP/Effect configuration and select **OptiLab Core 1.3.0**.
 5. Click **Configure** to choose the mode, Input drive, and Auto-adapt amount.
 
 Classic Winamp normally uses:
@@ -82,7 +81,7 @@ If the plug-in does not appear:
 2. Confirm that the DLL is in the exact folder configured by that host.
 3. Fully close and restart the host after copying the DLL.
 4. Check the DLL Properties > Details page for Company `LanesAudio` and Product
-   version `1.2.0`.
+   version `1.3.0`.
 5. Remove older copies from other plug-in folders to avoid loading the wrong DLL.
 
 The Release DLL statically links the Microsoft C/C++ runtime, so a separate

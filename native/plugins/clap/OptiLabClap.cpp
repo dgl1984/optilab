@@ -1,4 +1,4 @@
-﻿// Copyright 2026 Lanes Audio
+// Copyright 2026 Lanes Audio
 // SPDX-License-Identifier: Apache-2.0
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
@@ -76,7 +76,7 @@ double clampParameter(clap_id id, double value) {
 }
 
 double defaultInputDrive(int mode) {
-    return mode == 0 ? 3.5 : mode == 1 ? 4.5 : 0.0;
+    return mode == 0 ? 3.5 : 0.0;
 }
 
 const char* modeName(int mode) {

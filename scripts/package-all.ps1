@@ -64,6 +64,10 @@ Copy-Item -LiteralPath "$repositoryRoot\native\WINAMP.md" -Destination $stage
 Copy-Item -LiteralPath "$repositoryRoot\native\API.md" -Destination $stage
 Copy-Item -LiteralPath "$repositoryRoot\docs\CLAP_ACCESSIBILITY.md" -Destination $stage
 
+# Copy bare plug-in binaries directly to dist output root for direct release asset upload
+Copy-Item -LiteralPath $clapPlugin -Destination (Join-Path $outputRoot "OptiLab_Core.clap") -Force
+Copy-Item -LiteralPath $winampDll -Destination (Join-Path $outputRoot "dsp_optilab_core.dll") -Force
+
 $clapHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage "OptiLab_Core.clap")).Hash
 $dllHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage "dsp_optilab_core.dll")).Hash
 $jsfxHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage "optilab_core.jsfx")).Hash
