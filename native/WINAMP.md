@@ -78,7 +78,7 @@ If the plug-in does not appear:
 2. Confirm that the DLL is in the exact folder configured by that host.
 3. Fully close and restart the host after copying the DLL.
 4. Check the DLL Properties > Details page for Company `LanesAudio` and Product
-   version `1.3.1`.
+   version `1.3.2`.
 5. Remove older copies from other plug-in folders to avoid loading the wrong DLL.
 
 The Release DLL statically links the Microsoft C/C++ runtime, so a separate

@@ -77,7 +77,9 @@ are documented in the
 
 ## Rendering
 
-The wrapper keeps latency constant within the selected mode and pads lower-latency Auto-Adapt settings only to that mode's maximum. Podcast Leveler and Stream polish therefore do not inherit Smooth Limiter's longer mastering latency. Changing Mode can require the host to restart or reactivate the plug-in so it can refresh PDC; Auto-Adapt changes do not change the reported latency within a mode. It implements CLAP offline-render notification,
+The wrapper keeps latency constant within the selected mode and pads lower-latency Auto-Adapt settings only to that mode's maximum. Podcast Leveler and Stream polish therefore do not inherit Smooth Limiter's longer mastering latency. Changing Mode can require the host to restart or reactivate the plug-in so it can refresh PDC; Auto-Adapt changes do not change the reported latency within a mode.
+
+It implements CLAP offline-render notification,
 disables visual-meter bookkeeping during offline rendering, and enables
 flush-to-zero handling for inaudible denormal values.
 

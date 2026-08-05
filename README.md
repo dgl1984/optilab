@@ -63,11 +63,11 @@ Downstream processing, unusual resamplers, and lossy codecs can still alter peak
 Release downloads are available from the repository's GitHub Releases page.
 
 **Updating from a previous version?** Download the bare plug-in files and replace
-what you have â€” no extraction needed:
+what you have — no extraction needed:
 
-- `OptiLab_Core.clap` â€” drop-in replacement for the 64-bit Windows CLAP plug-in.
-- `dsp_optilab_core.dll` â€” drop-in replacement for the Winamp-compatible DSP.
-- `optilab_core.jsfx` â€” drop-in replacement for REAPER users.
+- `OptiLab_Core.clap` — drop-in replacement for the 64-bit Windows CLAP plug-in.
+- `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
+- `optilab_core.jsfx` — drop-in replacement for REAPER users.
 
 **Complete Package:** Download `OptiLab-Core-1.3.2.zip` to get all three plug-in formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`), documentation, and SHA-256 checksums in a single archive.
 
