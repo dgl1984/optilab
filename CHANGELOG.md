@@ -28,7 +28,7 @@ Version 1.3.2 fixes a regression in the **Stream polish** stereo widener, improv
 
 OptiLab's widener design follows a long-established broadcast-processing idea: additional stereo difference information should be applied dynamically and restrained when the existing stereo image does not need more enhancement.
 
-For historical technical background, see Robert Orban's [US4837824A, â€œStereophonic image widening circuitâ€](https://patents.google.com/patent/US4837824A/en). The cited 1989 patent is long expired and is referenced here as background on the underlying stereo-widening concept, not because OptiLab directly implements the patented circuit.
+For historical technical background, see Robert Orban's [US4837824A, "Stereophonic image widening circuit"](https://patents.google.com/patent/US4837824A/en). The cited 1989 patent is long expired and is referenced here as background on the underlying stereo-widening concept, not because OptiLab directly implements the patented circuit.
 
 ## OptiLab Core v1.3.1
 
