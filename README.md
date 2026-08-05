@@ -40,46 +40,36 @@ important than an aggressive broadcast sound.
 Start gently. If the result becomes too flat, dense, or pushed, lower Input
 before changing everything else.
 
-## What is new in v1.3.1
+## What is new in v1.3.2
 
-Version 1.3.1 keeps OptiLab Core's simple **Mode**, **Input**, and
-**Auto-Adapt** workflow while improving Stream polish's low-end balance and
-stability.
+Version 1.3.2 fixes a regression in **Stream polish** stereo widening, improves final peak protection, and removes unnecessary CLAP delay from lower-latency modes without adding new controls.
 
-In **Stream polish**, Auto-Adapt now handles lean low end more intelligently
-while remaining conservative with repeated bass activity and persistent
-sub-rumble. The result is steadier low-frequency weight with less risk of
-pumping or unnecessary buildup.
+The affected widener could raise the Side channel too indiscriminately when more width was requested. The restored content-aware guards now restrain already-wide material while still allowing narrower material to open naturally as Auto-Adapt rises.
 
-Output-ceiling behavior is also more consistent across supported engine sample
-rates. **Podcast Leveler**, **Smooth Limiter**, and the visible interface remain
-unchanged.
+Core also now uses reconstruction-aware final delivery limiting to catch intersample peaks that can become actual overs during common sample-rate conversion. The final output target remains **-0.1 dBFS**.
+
+JSFX and CLAP now keep latency fixed within the selected mode. Podcast Leveler and Stream polish therefore no longer inherit Smooth Limiter's much longer mastering delay in CLAP.
 
 ## Output ceiling and sample rates
 
-OptiLab Core clamps its own output samples to the ceiling selected by each
-mode. If a host processes Core at one sample rate and then converts the result
-to another rate, that later resampling can create new peaks above Core's sample
-ceiling. This is normal resampling behavior and does not mean Core skipped its
-final limiter.
+OptiLab Core now uses a reconstruction-aware final delivery limiter. In addition to controlling the stored output samples, it detects intersample peaks that can become actual overs when audio is converted between common sample rates such as 44.1 and 48 kHz.
 
-For a controlled ceiling test, use the same project, processing, and output
-sample rate. If the final delivery workflow must resample after Core, measure
-the converted file and apply any required true-peak or delivery limiting after
-that conversion.
+The final output target remains **-0.1 dBFS**. The delivery limiter is designed to act only when reconstruction-aware peak safety requires it rather than lowering the entire program for extra headroom.
+
+Downstream processing, unusual resamplers, and lossy codecs can still alter peaks after Core, so measuring the final delivered file remains good practice.
 
 ## Downloads
 
 Release downloads are available from the repository's GitHub Releases page.
 
 **Updating from a previous version?** Download the bare plug-in files and replace
-what you have — no extraction needed:
+what you have â€” no extraction needed:
 
-- `OptiLab_Core.clap` — drop-in replacement for the 64-bit Windows CLAP plug-in.
-- `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
-- `optilab_core.jsfx` — drop-in replacement for REAPER users.
+- `OptiLab_Core.clap` â€” drop-in replacement for the 64-bit Windows CLAP plug-in.
+- `dsp_optilab_core.dll` â€” drop-in replacement for the Winamp-compatible DSP.
+- `optilab_core.jsfx` â€” drop-in replacement for REAPER users.
 
-**Complete Package:** Download `OptiLab-Core-1.3.1.zip` to get all three plug-in formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`), documentation, and SHA-256 checksums in a single archive.
+**Complete Package:** Download `OptiLab-Core-1.3.2.zip` to get all three plug-in formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`), documentation, and SHA-256 checksums in a single archive.
 
 ## REAPER installation
 
@@ -91,7 +81,7 @@ what you have — no extraction needed:
 
 ## CLAP installation
 
-1. Download `OptiLab-Core-1.3.1.zip` (and extract `OptiLab_Core.clap`), or download `OptiLab_Core.clap` directly.
+1. Download `OptiLab-Core-1.3.2.zip` (and extract `OptiLab_Core.clap`), or download `OptiLab_Core.clap` directly.
 2. Close the CLAP host.
 3. Copy `OptiLab_Core.clap` to
    `%LOCALAPPDATA%\Programs\Common\CLAP`.
@@ -106,10 +96,10 @@ The Windows DLL uses the classic 32-bit Winamp DSP/Effect interface. It can be
 used by Winamp and by compatible Windows broadcast applications that support
 Winamp DSP plug-ins.
 
-1. Download `OptiLab-Core-1.3.1.zip` (and extract `dsp_optilab_core.dll`), or download `dsp_optilab_core.dll` directly.
+1. Download `OptiLab-Core-1.3.2.zip` (and extract `dsp_optilab_core.dll`), or download `dsp_optilab_core.dll` directly.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
-4. Restart the host and select **OptiLab Core 1.3.1** in its DSP configuration.
+4. Restart the host and select **OptiLab Core 1.3.2** in its DSP configuration.
 
 Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
 require administrator approval. Other hosts choose their own plug-in folders.

@@ -29,7 +29,7 @@ Create a version-checked candidate ZIP and SHA-256 file with:
 CI verifies that the module is x64, exports `clap_entry`, and has no dynamic
 Microsoft C/C++ runtime dependency before uploading the candidate artifact.
 For version tags, the release job downloads that exact tested artifact and
-publishes the unified release package `OptiLab-Core-1.3.1.zip` along with the
+publishes the unified release package `OptiLab-Core-1.3.2.zip` along with the
 direct plug-in assets.
 
 The CLAP smoke test loads the built module through `clap_entry` and verifies:
@@ -77,8 +77,7 @@ are documented in the
 
 ## Rendering
 
-The wrapper reports one constant latency for the active sample rate and pads
-lower-latency modes internally. It implements CLAP offline-render notification,
+The wrapper keeps latency constant within the selected mode and pads lower-latency Auto-Adapt settings only to that mode's maximum. Podcast Leveler and Stream polish therefore do not inherit Smooth Limiter's longer mastering latency. Changing Mode can require the host to restart or reactivate the plug-in so it can refresh PDC; Auto-Adapt changes do not change the reported latency within a mode. It implements CLAP offline-render notification,
 disables visual-meter bookkeeping during offline rendering, and enables
 flush-to-zero handling for inaudible denormal values.
 

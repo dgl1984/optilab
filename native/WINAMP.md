@@ -40,7 +40,7 @@ No administrator access is needed to save settings.
 1. Close the audio host.
 2. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
 3. Restart the host.
-4. Open its DSP/Effect configuration and select **OptiLab Core 1.3.1**.
+4. Open its DSP/Effect configuration and select **OptiLab Core 1.3.2**.
 5. Click **Configure** to choose the mode, Input drive, and Auto-adapt amount.
 
 Classic Winamp normally uses:
@@ -66,12 +66,9 @@ automatic balancing.
 
 ## Output ceiling and sample-rate conversion
 
-OptiLab Core applies its final sample ceiling before returning audio to the
-host. If the host converts sample rates after the DSP plug-in, the conversion
-filter can create new sample peaks above that ceiling. For a controlled ceiling
-test, keep host processing and output at the same sample rate. If conversion is
-required for delivery, measure the converted output and perform any required
-true-peak limiting after conversion.
+OptiLab Core now uses reconstruction-aware final delivery limiting before returning audio to the host. This protects against intersample peaks that can become actual overs during common sample-rate conversion while retaining the **-0.1 dBFS** output target.
+
+Downstream processing, unusual resamplers, and lossy codecs can still alter peaks after the DSP, so measuring the final delivered stream or file remains good practice.
 
 ## Troubleshooting
 

@@ -1,4 +1,4 @@
-﻿// Copyright 2026 Lanes Audio
+// Copyright 2026 Lanes Audio
 // SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
@@ -260,6 +260,8 @@ int main(int argc, char** argv) {
     passed &= expect(plugin->activate(plugin, 48000.0, 1, 512), "activate");
     const std::uint32_t reportedLatency = latency ? latency->get(plugin) : 0;
     passed &= expect(reportedLatency > 0, "reported latency");
+    passed &= expect(reportedLatency == 144,
+                     "48 kHz Podcast latency must be 144 samples, not the global Smooth maximum");
     passed &= expect(plugin->start_processing(plugin), "start processing");
 
     constexpr std::uint32_t frames = 2048;

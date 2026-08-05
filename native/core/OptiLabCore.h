@@ -1,7 +1,3 @@
-﻿// Copyright 2026 Lanes Audio
-// SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
-// Licensed under the Apache License, Version 2.0 with the Commons Clause
-// License Condition v1.0. See LICENSE and NOTICE in the repository root.
 #pragma once
 
 #include <array>
@@ -206,6 +202,8 @@ private:
     double hybridEventTonalCorrelation(std::int64_t nowAbs) const;
     double apCoeff(double freq) const;
     void processHybrid(double& l, double& r);
+    void processDelivery(double& l, double& r);
+    double adaptiveStereoWidthGain(double midDet, double sideDet, double extraRequest);
     std::pair<double, double> processFoundationGuard(double preL, double preR, double boostedL, double boostedR);
     void applyModeAndDerivedParameters();
     void resetPhaseState();
@@ -221,6 +219,25 @@ private:
     std::array<double, fcsBufferLength> fcsBufOL{};
     std::array<double, fcsBufferLength> fcsBufOR{};
     int fcsWrite = 0;
+
+    // One transparent reconstruction-aware delivery limiter owns final ceiling safety.
+    // The detector is oversampled; the audio path itself remains at the host rate.
+    static constexpr int deliveryBufferLength = 2048;
+    static constexpr int deliveryDetectorTaps = 13;
+    static constexpr int deliveryDetectorPhases = 8;
+    static constexpr int deliveryDetectorDelaySamples = 6;
+    std::array<double, deliveryBufferLength> deliveryBufL{};
+    std::array<double, deliveryBufferLength> deliveryBufR{};
+    std::array<double, deliveryBufferLength> deliveryRequired{};
+    std::array<double, deliveryDetectorTaps> deliveryHistL{};
+    std::array<double, deliveryDetectorTaps> deliveryHistR{};
+    std::array<double, deliveryDetectorTaps * deliveryDetectorPhases> deliveryCoeff{};
+    int deliveryWrite = 0;
+    int deliveryLookaheadSamples = 0;
+    int deliveryAnticipationSamples = 1;
+    double deliveryGain = 1.0;
+    double deliveryRelease = 0.0;
+    double deliveryTarget = 1.0;
 
     static constexpr int hybridHistoryLength = 16384;
     static constexpr int hybridEnergyLength = 8192;
@@ -272,6 +289,9 @@ private:
     double presenceEdgeRecoveryGain = 1.0, presenceBodyRecoveryGain = 1.0, brillianceRecoveryGain = 1.0;
     std::array<double,6> limiterWorkDb{}, limiterWork{}, limiterQuietThreshold{};
     double overshootAmt = 0.0, recombControl = 0.0, pdRelease = 0.0, upperSnubber = 0.0, gateReopenStrength = 0.0, sideScale = 1.0;
+    double widthMidFast = 0.0, widthMidSlow = 0.0, widthMidEnv = 0.0, widthSideEnv = 0.0, widthAdaptiveGain = 0.0;
+    double widthMidFastAttack = 0.0, widthMidFastRelease = 0.0, widthMidSlowAttack = 0.0, widthMidSlowRelease = 0.0;
+    double widthLevelAttack = 0.0, widthLevelRelease = 0.0, widthGainReduce = 0.0, widthGainRestore = 0.0;
 
     double inputTrimDb = 0.0, phaseRotatePct = 0.0; int subsonicHpf = 0;
     double agcAmountPct = 0.0, agcDriveDb = 0.0, releaseTime = 6.0, pdReleasePct = 0.0;

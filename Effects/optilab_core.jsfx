@@ -1,14 +1,22 @@
 // @description OptiLab Core
-// @version 1.3.1
+// @version 1.3.2
 // @author LanesAudio
 // @about
 //   OptiLab Core is a three-control broadcast and mastering processor.
-//   v1.3.1 refines Stream Auto-Adapt and output delivery.
+//   v1.3.2 restores content-aware stereo widening and adds reconstruction-aware final delivery protection.
 // @changelog
+//   v1.3.2
+//   - Fixed a Stream polish stereo-widener regression that could raise the Side channel too indiscriminately.
+//   - Restored content-aware widening guards so already-wide material is restrained while useful narrower material can open naturally.
+//   - Added reconstruction-aware final delivery limiting for safer peaks through common sample-rate conversion.
+//   - Kept latency fixed within each selected mode so lower-latency modes do not inherit Smooth Limiter's delay.
+//   - Kept the final output target at -0.1 dBFS and the same three-control workflow.
 //   v1.3.1
-//   - Stream Auto-Adapt handles lean low end more intelligently.
-//   - Repeated bass overload and persistent sub-rumble are handled more conservatively.
-//   - Output-ceiling behavior is more consistent across engine sample rates.
+//   - Added slow post-bass feedback refinement for moderately lean Stream material.
+//   - Added activity burden withdrawal so rapid kick/bass trains do not overload downstream Density/Final processing.
+//   - Added a persistent sub-rumble veto using the Stream HPF rejection signal; no extra crossover is created.
+//   - Feedback assist is hard-capped at 12 dB and normally operates well below that ceiling.
+//   - Reinforced sample-rate-change state reset and final -0.1 dBFS sample-peak delivery guard.
 //   v1.3.0
 //   - Stream polish Auto-Adapt now builds more progressively from open polish into firmer broadcast-style control.
 //   - At higher settings, Auto-Adapt adds more width, bass control, density, Shape, and peak protection while preserving useful low-end weight.
@@ -19,7 +27,7 @@
 // @license Apache-2.0 with Commons Clause (https://commonsclause.com/). See LICENSE.
 // @provides
 //   optilab_core.jsfx
-desc:OptiLab Core v1.3.1 (LanesAudio)
+desc:OptiLab Core v1.3.2 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
@@ -558,12 +566,16 @@ function reset_dynamic_state() local(i)
   adapt_bass_model_useful_boost_state_db = 0;
   adapt_bass_model_deep_cut_state_db = 0;
   adapt_bass_model_useful_cut_state_db = 0;
+  // Feedback bass servo: post-bass detector reuses the already-computed density bands.
+  // No additional crossover/filter is created.
   adapt_bass_feedback_b1_accum = 0;
   adapt_bass_feedback_b2_accum = 0;
   adapt_bass_feedback_count = 0;
   adapt_bass_feedback_ratio_db = -120;
   adapt_bass_feedback_servo_db = 0;
   adapt_bass_feedback_burden = 0;
+  // Rumble guard reuses the low-frequency component already rejected by the
+  // existing Stream 42.5 Hz HPF. No additional crossover/filter is added.
   adapt_bass_feedback_rumble_sub_accum = 0;
   adapt_bass_feedback_rumble_total_accum = 0;
   adapt_bass_feedback_rumble_count = 0;
@@ -626,6 +638,24 @@ function reset_dynamic_state() local(i)
   master_raw_env.e = 0;
   master_amp_env.e = 0;
   master_catch_env.e = 0;
+  delivery_wrpos = 0;
+  delivery_gain = 1;
+  i = 0;
+  loop(delivery_buf_len,
+    delivery_buf_l[i] = 0; delivery_buf_r[i] = 0; delivery_required[i] = 1;
+    i += 1;
+  );
+  i = 0;
+  loop(delivery_detector_taps,
+    delivery_hist_l[i] = 0; delivery_hist_r[i] = 0;
+    i += 1;
+  );
+  mode_comp_wrpos = 0;
+  i = 0;
+  loop(mode_comp_buf_len,
+    mode_comp_l[i] = 0; mode_comp_r[i] = 0;
+    i += 1;
+  );
 
   i = 0;
   loop(fcs_buf_len,
@@ -848,6 +878,29 @@ function refresh_meter_readout() local(old_selected_value old_stage_name)
 
 );
 
+function update_mode_latency_policy() local(max_snub max_final max_master hybrid15 hybrid20 core_latency)
+(
+  max_snub = min(snub_buf_len - 1, floor(srate_safe * 0.00150 + 0.5));
+  max_final = min(fcs_buf_len - 1, floor(srate_safe * 0.00150 + 0.5));
+  max_master = min(master_buf_len - 1, floor(srate_safe * 0.01000 + 0.5));
+  hybrid15 = floor(srate_safe * 0.00150 + 0.5);
+  hybrid20 = floor(srate_safe * 0.00200 + 0.5);
+
+  core_mode == 0 ? (
+    mode_latency_target_spl = max_final + delivery_lookahead_spl;
+  ) : core_mode == 1 ? (
+    mode_latency_target_spl = max_snub + max_final + hybrid15 + hybrid20 + delivery_lookahead_spl;
+  ) : (
+    mode_latency_target_spl = max_master + max_snub + max_final + hybrid20 + hybrid20 + delivery_lookahead_spl;
+  );
+
+  core_latency = path_delay + hybrid_total_spl + delivery_lookahead_spl;
+  mode_comp_delay_spl = min(mode_comp_buf_len - 1, max(0, mode_latency_target_spl - core_latency));
+  pdc_delay = mode_latency_target_spl;
+  pdc_bot_ch = 0;
+  pdc_top_ch = 2;
+);
+
 function update_derived_params() local(dpos dneg)
 (
   shape_rec_block_size = 16;
@@ -870,12 +923,12 @@ function update_derived_params() local(dpos dneg)
   upper_snubber = upper_snubber_pct * 0.01;
   overshoot_amt = overshoot_pct * 0.01;
 
-  snubber_lookahead_ms > 1.50 ? snubber_lookahead_ms = min(snubber_lookahead_ms, 64) * 1000 / 44100;
-  lookahead_ms > 1.50 ? lookahead_ms = min(lookahead_ms, 64) * 1000 / 44100;
+  // Lookahead values are milliseconds; simply cap them at the engine maximum.
   snubber_lookahead_ms = clamp(snubber_lookahead_ms, 0, 1.50);
   lookahead_ms = clamp(lookahead_ms, 0, 1.50);
 
   ceiling = db2lin(clip_ceiling_db);
+  delivery_target = ceiling * db2lin(-0.075);
   clip_ref = ceiling * 0.985;
   mb_ref = ceiling * 0.985;
 
@@ -884,6 +937,9 @@ function update_derived_params() local(dpos dneg)
   mastering_lookahead_samps = processor_mode == 1 ? min(master_buf_len - 1, floor(srate_safe * 0.010 + 0.5)) : 0;
   master_startup_prime_window = floor(srate_safe * 0.350 + 0.5);
   master_startup_active_thresh = db2lin(-70);
+  delivery_lookahead_spl = min(delivery_buf_len - 2, floor(srate_safe * 0.00150 + 0.5));
+  delivery_anticipation_spl = max(1, delivery_lookahead_spl - delivery_detector_delay_spl);
+  delivery_release = exp(-1/max(1, srate_safe * 0.030));
 
   diag_stage = -1;
   input_section_mode == 1 || input_section_mode == 2 ? diag_stage = 0;
@@ -902,10 +958,6 @@ function update_derived_params() local(dpos dneg)
     path_delay = mastering_lookahead_samps + effective_snubber_lookahead;
     final_section_mode != 3 ? path_delay += effective_final_lookahead;
   );
-  pdc_delay = path_delay + hybrid_total_spl;
-  pdc_bot_ch = 0;
-  pdc_top_ch = 2;
-
   phase_legacy_val = phase_rotate_pct;
   phase_legacy_val > 6 ? (
     phase_rotate_pct = 6;
@@ -1196,11 +1248,16 @@ function update_derived_params() local(dpos dneg)
   adapt_bass_model_voice_return = exp(-1/(srate_safe * 2.200));
   adapt_bass_model_voice_withdraw = exp(-1/(srate_safe * 0.300));
 
+  // Slow closed-loop refinement. The feed-forward model still decides the basic
+  // direction; this servo only adds foundation when a moderate lean case remains
+  // under-filled after the bass section.
   adapt_bass_feedback_attack_tick = exp(-16/(srate_safe * 1.600));
   adapt_bass_feedback_release_tick = exp(-16/(srate_safe * 4.000));
   adapt_bass_feedback_fast_release_tick = exp(-16/(srate_safe * 0.250));
   adapt_bass_feedback_burden_attack_tick = exp(-16/(srate_safe * 0.300));
   adapt_bass_feedback_burden_release_tick = exp(-16/(srate_safe * 1.200));
+  // Slow enough to ignore isolated musical sub hits, but established long before
+  // the feedback servo becomes eligible at five seconds.
   adapt_bass_feedback_rumble_energy_tick = exp(-16/(srate_safe * 0.250));
   adapt_bass_feedback_rumble_attack_tick = exp(-16/(srate_safe * 0.650));
   adapt_bass_feedback_rumble_release_tick = exp(-16/(srate_safe * 2.000));
@@ -1487,6 +1544,56 @@ hybrid_onset1=-1000000000;
 hybrid_onset2=-1000000000;
 hybrid_onset3=-1000000000;
 
+// Reconstruction-aware final delivery limiter.
+delivery_buf_len=2048;
+delivery_detector_taps=13;
+delivery_detector_phases=8;
+delivery_detector_delay_spl=6;
+delivery_base=hybrid_required_active+hybrid_buf_len+256;
+delivery_buf_l=delivery_base;
+delivery_buf_r=delivery_buf_l+delivery_buf_len;
+delivery_required=delivery_buf_r+delivery_buf_len;
+delivery_hist_l=delivery_required+delivery_buf_len;
+delivery_hist_r=delivery_hist_l+delivery_detector_taps;
+delivery_coeff=delivery_hist_r+delivery_detector_taps;
+delivery_wrpos=0;
+delivery_gain=1;
+
+// Post-Core mode compensation keeps total latency fixed within the selected mode.
+// It sits after all approved processing and changes timing only.
+mode_comp_buf_len=16384;
+mode_comp_l=delivery_coeff+delivery_detector_taps*delivery_detector_phases+256;
+mode_comp_r=mode_comp_l+mode_comp_buf_len;
+mode_comp_wrpos=0;
+mode_comp_delay_spl=0;
+mode_latency_target_spl=0;
+delivery_coeff[0]=-0.000000000000000000013844169321618725; delivery_coeff[1]=-0.00001714921976246157; delivery_coeff[2]=-0.000060455354465933198; delivery_coeff[3]=-0.00013469286395706965;
+delivery_coeff[4]=-0.00023160238989120024; delivery_coeff[5]=-0.00032332265730525061; delivery_coeff[6]=-0.0003600104603619452; delivery_coeff[7]=-0.00027504148634858571;
+delivery_coeff[8]=0.00000000000000000060606534200398679; delivery_coeff[9]=0.00051085703445464983; delivery_coeff[10]=0.001250487575043453; delivery_coeff[11]=0.0021308196075711743;
+delivery_coeff[12]=0.0029665989652898936; delivery_coeff[13]=0.0034820444871444117; delivery_coeff[14]=0.0033483400339087972; delivery_coeff[15]=0.0022538484680090843;
+delivery_coeff[16]=-0.0000000000000000035554623665915375; delivery_coeff[17]=-0.0033942098842589048; delivery_coeff[18]=-0.0076047501191611674; delivery_coeff[19]=-0.011962021412121901;
+delivery_coeff[20]=-0.015484681728320933; delivery_coeff[21]=-0.017004709450766174; delivery_coeff[22]=-0.015382518566289935; delivery_coeff[23]=-0.009787990225543379;
+delivery_coeff[24]=0.000000000000000010995038784723119; delivery_coeff[25]=0.013340886368729633; delivery_coeff[26]=0.028598727193283838; delivery_coeff[27]=0.043191291142155211;
+delivery_coeff[28]=0.053860575775541528; delivery_coeff[29]=0.057163886353818583; delivery_coeff[30]=0.050136702874308096; delivery_coeff[31]=0.031031400490199576;
+delivery_coeff[32]=-0.000000000000000022679691912594559; delivery_coeff[33]=-0.040425713396770119; delivery_coeff[34]=-0.085190471768009743; delivery_coeff[35]=-0.12699970260918969;
+delivery_coeff[36]=-0.15705587807582772; delivery_coeff[37]=-0.16618945163077609; delivery_coeff[38]=-0.14624496557209393; delivery_coeff[39]=-0.091517460508963533;
+delivery_coeff[40]=0.000000000000000034139513012774583; delivery_coeff[41]=0.12579016041624319; delivery_coeff[42]=0.27858892579190281; delivery_coeff[43]=0.44686041775752949;
+delivery_coeff[44]=0.61595203494645079; delivery_coeff[45]=0.76979541479457969; delivery_coeff[46]=0.89291964938217938; delivery_coeff[47]=0.97247963729367337;
+delivery_coeff[48]=0.99998818525633759; delivery_coeff[49]=0.97247963729367337; delivery_coeff[50]=0.89291964938217938; delivery_coeff[51]=0.76979541479457969;
+delivery_coeff[52]=0.61595203494645079; delivery_coeff[53]=0.44686041775752949; delivery_coeff[54]=0.27858892579190281; delivery_coeff[55]=0.12579016041624319;
+delivery_coeff[56]=0.000000000000000034139513012774583; delivery_coeff[57]=-0.091517460508963533; delivery_coeff[58]=-0.14624496557209393; delivery_coeff[59]=-0.16618945163077609;
+delivery_coeff[60]=-0.15705587807582772; delivery_coeff[61]=-0.12699970260918969; delivery_coeff[62]=-0.085190471768009743; delivery_coeff[63]=-0.040425713396770119;
+delivery_coeff[64]=-0.000000000000000022679691912594559; delivery_coeff[65]=0.031031400490199576; delivery_coeff[66]=0.050136702874308096; delivery_coeff[67]=0.057163886353818583;
+delivery_coeff[68]=0.053860575775541528; delivery_coeff[69]=0.043191291142155211; delivery_coeff[70]=0.028598727193283838; delivery_coeff[71]=0.013340886368729633;
+delivery_coeff[72]=0.000000000000000010995038784723119; delivery_coeff[73]=-0.009787990225543379; delivery_coeff[74]=-0.015382518566289935; delivery_coeff[75]=-0.017004709450766174;
+delivery_coeff[76]=-0.015484681728320933; delivery_coeff[77]=-0.011962021412121901; delivery_coeff[78]=-0.0076047501191611674; delivery_coeff[79]=-0.0033942098842589048;
+delivery_coeff[80]=-0.0000000000000000035554623665915375; delivery_coeff[81]=0.0022538484680090843; delivery_coeff[82]=0.0033483400339087972; delivery_coeff[83]=0.0034820444871444117;
+delivery_coeff[84]=0.0029665989652898936; delivery_coeff[85]=0.0021308196075711743; delivery_coeff[86]=0.001250487575043453; delivery_coeff[87]=0.00051085703445464983;
+delivery_coeff[88]=0.00000000000000000060606534200398679; delivery_coeff[89]=-0.00027504148634858571; delivery_coeff[90]=-0.0003600104603619452; delivery_coeff[91]=-0.00032332265730525061;
+delivery_coeff[92]=-0.00023160238989120024; delivery_coeff[93]=-0.00013469286395706965; delivery_coeff[94]=-0.000060455354465933198; delivery_coeff[95]=-0.00001714921976246157;
+delivery_coeff[96]=-0.000000000000000000013844169321618725; delivery_coeff[97]=0; delivery_coeff[98]=0; delivery_coeff[99]=0;
+delivery_coeff[100]=0; delivery_coeff[101]=0; delivery_coeff[102]=0; delivery_coeff[103]=0;
+
 @slider
 
 core_mode = floor(clamp(core_mode,0,2)+0.5);
@@ -1502,11 +1609,11 @@ core_last_mode < 0 ? core_last_mode = core_mode : core_mode_changed ? (
 );
 
 a = auto_adapt_pct*0.01;
-w = core_stage(a,0.00,0.35);
+w = core_stage(a,0.40,1.00);
 b = core_stage(a,0.18,0.82);
 g = core_stage(a,0.35,0.88);
 d = core_stage(a,0.50,0.78);
-h = core_stage(a,0.50,0.80);
+h = core_stage(a,0.50,0.80); // Broadcast Shape now tracks the Stream 42.5 Hz HPF progression.
 f = core_stage(a,0.50,1.00);
 stream_foundation_mix = core_mode == 1 ? b : 0;
 stream_hpf_mix = core_mode == 1 ? core_stage(a,0.50,0.80) : 0;
@@ -1582,7 +1689,7 @@ core_mode == 0 ? (
   pre_limiter_pct = 100;
   clip_restraint_pct = 100;
   overshoot_pct = 100;
-  lookahead_ms = 0.36;
+  lookahead_ms = 0.36 + (1.50-0.36)*core_stage(a,0.70,1.00);
   final_threshold_db = -1.5;
   final_threshold_makeup_pct = 100;
   hybrid_sat_ceiling = 0;
@@ -1625,7 +1732,7 @@ core_mode == 0 ? (
   clip_drive_db = -0.8;
   dc_cancel_pct = 46 + (18-46)*f;
   upper_snubber_pct = 20 + (68-20)*f;
-  snubber_lookahead_ms = 0.73;
+  snubber_lookahead_ms = 0.73 + (1.50-0.73)*core_stage(a,0.65,1.00);
   post_xt2_smooth_drive_pct = 12 + (20-12)*f;
   density_output_db = 0;
   stream_pre_final_drive_db = -0.4 + 0.4*f;
@@ -1637,8 +1744,7 @@ core_mode == 0 ? (
   pre_limiter_pct = 44 + 2*f;
   clip_restraint_pct = 38 - 12*f;
   overshoot_pct = 100;
-  legacy_final_lookahead_ms = 0.54 + (0.70-0.54)*a;
-  lookahead_ms = legacy_final_lookahead_ms + (0.54-legacy_final_lookahead_ms)*f;
+  lookahead_ms = 0.54 + (1.50-0.54)*core_stage(a,0.65,1.00);
   final_threshold_db = -0.8 - 0.6*f;
   final_threshold_makeup_pct = 100;
   hybrid_sat_ceiling = 1;
@@ -1755,9 +1861,7 @@ hybrid_limiter_release=exp(-1/max(1,srate_safe*0.030));
 hybrid_period_min=max(2,floor(srate_safe*0.00025+0.5));
 hybrid_period_max=max(hybrid_period_min+1,min(floor(16384/3),floor(srate_safe*0.020+0.5)));
 
-pdc_delay = path_delay + hybrid_total_spl;
-pdc_bot_ch = 0;
-pdc_top_ch = 2;
+update_mode_latency_policy();
 
 (core_initial_apply || core_state_reset) ? (
   reset_meter_state();
@@ -1856,10 +1960,7 @@ block_srate_safe != srate_safe ? (
   reset_meter_state();
 );
 
-pdc_target_delay = path_delay + hybrid_total_spl;
-pdc_delay != pdc_target_delay ? pdc_delay = pdc_target_delay;
-pdc_bot_ch != 0 ? pdc_bot_ch = 0;
-pdc_top_ch != 2 ? pdc_top_ch = 2;
+update_mode_latency_policy();
 
 @sample
 preset_state_reset ? (
@@ -1910,14 +2011,14 @@ input_section_mode == 3 ? (
   core_mode == 1 ? (
     hpl = hp30_l.onepole_hp(l_in, hpf30_a);
     hpr = hp30_r.onepole_hp(r_in, hpf30_a);
-    adaptive_bass_foundation_guard_active ? (
-      abm_rumble_reject_l = l_in - hpl;
-      abm_rumble_reject_r = r_in - hpr;
-      adapt_bass_feedback_rumble_sub_accum += (abm_rumble_reject_l*abm_rumble_reject_l
-                                             + abm_rumble_reject_r*abm_rumble_reject_r) * 0.5;
-      adapt_bass_feedback_rumble_total_accum += (l_in*l_in + r_in*r_in) * 0.5;
-      adapt_bass_feedback_rumble_count += 1;
-    );
+    // The one-pole HPF already calculated its rejected low component. Accumulate
+    // only power scalars here so rumble rejection adds no new audio filter.
+    abm_rumble_reject_l = l_in - hpl;
+    abm_rumble_reject_r = r_in - hpr;
+    adapt_bass_feedback_rumble_sub_accum += (abm_rumble_reject_l*abm_rumble_reject_l
+                                           + abm_rumble_reject_r*abm_rumble_reject_r) * 0.5;
+    adapt_bass_feedback_rumble_total_accum += (l_in*l_in + r_in*r_in) * 0.5;
+    adapt_bass_feedback_rumble_count += 1;
     l = l_in + (hpl-l_in)*stream_hpf_mix;
     r = r_in + (hpr-r_in)*stream_hpf_mix;
   ) : subsonic_hpf ? (
@@ -2227,9 +2328,15 @@ adaptive_bass_foundation_guard_active ? (
   abm_slow_mid_energy = adapt_bass_model_slow_mid_env.peak_env(abm_mid_power, adapt_bass_model_slow_attack, adapt_bass_model_slow_release);
 
   adaptive_cpu_tick ? (
+    // Rumble veto: compare the already-rejected <42.5 Hz component with total
+    // Stream input power. It only suppresses the *new feedback assist*; stock
+    // v1.3 boost/cut behavior remains untouched.
     adapt_bass_feedback_rumble_count > 0 ? (
       abm_rumble_sub_energy = adapt_bass_feedback_rumble_sub_accum / adapt_bass_feedback_rumble_count;
       abm_rumble_total_energy = adapt_bass_feedback_rumble_total_accum / adapt_bass_feedback_rumble_count;
+      // Smooth the two energies before taking their ratio. This prevents a quiet
+      // gap from looking like rumble simply because the HPF's low state decays
+      // more slowly than the instantaneous broadband sample.
       adapt_bass_feedback_rumble_sub_env = abm_rumble_sub_energy
                                          + adapt_bass_feedback_rumble_energy_tick
                                          * (adapt_bass_feedback_rumble_sub_env - abm_rumble_sub_energy);
@@ -2242,6 +2349,9 @@ adaptive_bass_foundation_guard_active ? (
     adapt_bass_feedback_rumble_sub_accum = 0;
     adapt_bass_feedback_rumble_total_accum = 0;
     adapt_bass_feedback_rumble_count = 0;
+    // Begins reducing extra assist when rejected sub energy is unusually dominant
+    // (-5 dB of total power), reaching a full veto by -3 dB. Musical test clips
+    // do not sustain this region; the supplied 78-rpm rumble does.
     abm_rumble_target = smoothstep01((adapt_bass_feedback_rumble_ratio_db + 5.0) / 2.0);
     abm_rumble_coeff = abm_rumble_target > adapt_bass_feedback_rumble_state
                      ? adapt_bass_feedback_rumble_attack_tick
@@ -2251,6 +2361,9 @@ adaptive_bass_foundation_guard_active ? (
                                      * (adapt_bass_feedback_rumble_state - abm_rumble_target);
     abm_feedback_rumble_room = 1 - adapt_bass_feedback_rumble_state;
 
+    // Consume the previous 16-sample post-bass block. b1/b2 are generated later
+    // by the existing 150/420 Hz density split, so this is true one-block feedback
+    // with no new crossover work.
     adapt_bass_feedback_count > 0 ? (
       abm_feedback_b1_energy = adapt_bass_feedback_b1_accum / adapt_bass_feedback_count;
       abm_feedback_b2_energy = adapt_bass_feedback_b2_accum / adapt_bass_feedback_count;
@@ -2378,6 +2491,9 @@ adaptive_bass_foundation_guard_active ? (
       abm_useful_target_db = adapt_bass_model_useful_raw_db + (abm_shared_db - adapt_bass_model_useful_raw_db) * (0.10 * adapt_bass_lab_link);
     );
 
+    // Feedback-style foundation refinement. Preserve the existing strong-boost
+    // cases (Boston/Twin-style) and all cut cases; only the moderate lean window
+    // can ask for extra foundation. The useful/body path is never increased here.
     abm_feedback_eligible = abm_valid_program
                           && adapt_bass_model_age_samples >= floor(srate_safe * 5.0 + 0.5) ? 1 : 0;
     abm_feedback_moderate = smoothstep01((abm_deep_target_db - 0.8) / 1.0)
@@ -2386,6 +2502,9 @@ adaptive_bass_foundation_guard_active ? (
     abm_feedback_body_lean = smoothstep01((-1.0 - abm_slow_useful_ratio_db) / 0.6);
     abm_feedback_no_cut = 1 - smoothstep01(abm_global_cut_target_db / 0.25);
 
+    // Post-bass feedback serves two jobs. The instantaneous room term prevents
+    // static overfill, while the burden term notices sustained/rapid low-band
+    // dominance (Crazy-style kick/bass trains) without adding another crossover.
     abm_feedback_post_room = 1 - smoothstep01((adapt_bass_feedback_ratio_db - 3.2) / 0.8);
     abm_feedback_post_excess = smoothstep01((adapt_bass_feedback_ratio_db - 3.0) / 2.0);
     abm_feedback_burden_coeff = abm_feedback_post_excess > adapt_bass_feedback_burden
@@ -2623,6 +2742,8 @@ crossover_model == 3 ? (
   b6_r = rem_r - b5_r;
 );
 
+// Post-bass feedback detector reuses b1/b2 from the existing density crossover.
+// This is intentionally just energy accumulation; no extra filter or split is run.
 adaptive_bass_foundation_guard_active ? (
   adapt_bass_feedback_b1_accum += (b1_l*b1_l + b1_r*b1_r) * 0.5;
   adapt_bass_feedback_b2_accum += (b2_l*b2_l + b2_r*b2_r) * 0.5;
@@ -3301,7 +3422,15 @@ stereo_section_in_r = r;
 
 stereo_section_active ? (
   mid = (l + r) * 0.5;
-  side = (l - r) * 0.5 * (stereo_width_pct * 0.01);
+  side = (l - r) * 0.5;
+  width_scale = stereo_width_pct * 0.01;
+  width_scale <= 1 ? (
+    side *= width_scale;
+  ) : (
+    width_extra_request = width_scale - 1;
+    width_adaptive_now = adaptive_width.adaptive_stereo_width_gain(abs(mid), abs(side), width_extra_request);
+    side *= 1 + width_extra_request * width_adaptive_now;
+  );
   stereo_mode == 1 ? side = soft_clip_knee(side, max(0.05, abs(mid) * 0.90 + 0.08), 0.30);
   l = mid + side;
   r = mid - side;
@@ -3635,6 +3764,60 @@ hybrid_clock+=1;
   final_section_proc_r=legacy_final_r;
 );
 
+// One linked, transparent delivery limiter owns reconstruction safety.
+delivery_w=delivery_wrpos;
+delivery_buf_l[delivery_w]=final_section_proc_l;
+delivery_buf_r[delivery_w]=final_section_proc_r;
+delivery_required[delivery_w]=1;
+delivery_t=delivery_detector_taps-1;
+loop(delivery_detector_taps-1,
+  delivery_hist_l[delivery_t]=delivery_hist_l[delivery_t-1];
+  delivery_hist_r[delivery_t]=delivery_hist_r[delivery_t-1];
+  delivery_t-=1;
+);
+delivery_hist_l[0]=final_section_proc_l;
+delivery_hist_r[0]=final_section_proc_r;
+
+delivery_peak=absmax2(final_section_proc_l,final_section_proc_r);
+delivery_p=0;
+loop(delivery_detector_phases,
+  delivery_sum_l=0; delivery_sum_r=0;
+  delivery_t=0;
+  loop(delivery_detector_taps,
+    delivery_c=delivery_coeff[delivery_t*delivery_detector_phases+delivery_p];
+    delivery_sum_l+=delivery_hist_l[delivery_t]*delivery_c;
+    delivery_sum_r+=delivery_hist_r[delivery_t]*delivery_c;
+    delivery_t+=1;
+  );
+  delivery_peak=max(delivery_peak,absmax2(delivery_sum_l,delivery_sum_r));
+  delivery_p+=1;
+);
+delivery_req=delivery_peak>delivery_target ? delivery_target/max(delivery_peak,0.000000000001) : 1;
+delivery_det_idx=delivery_w-delivery_detector_delay_spl;
+delivery_det_idx<0 ? delivery_det_idx+=delivery_buf_len;
+delivery_required[delivery_det_idx]=min(delivery_required[delivery_det_idx],delivery_req);
+
+delivery_read=delivery_w-delivery_lookahead_spl;
+delivery_read<0 ? delivery_read+=delivery_buf_len;
+delivery_target_gain=1;
+delivery_ahead=0;
+loop(delivery_anticipation_spl+1,
+  delivery_idx=delivery_read+delivery_ahead;
+  delivery_idx>=delivery_buf_len ? delivery_idx-=delivery_buf_len;
+  delivery_req_now=delivery_required[delivery_idx];
+  delivery_u=delivery_ahead/delivery_anticipation_spl;
+  delivery_shape=delivery_u*delivery_u*(3-2*delivery_u);
+  delivery_candidate_gain=delivery_req_now+(1-delivery_req_now)*delivery_shape;
+  delivery_target_gain=min(delivery_target_gain,delivery_candidate_gain);
+  delivery_ahead+=1;
+);
+delivery_target_gain<delivery_gain ? delivery_gain=delivery_target_gain : delivery_gain=delivery_target_gain+delivery_release*(delivery_gain-delivery_target_gain);
+delivery_gain>0.999999999 ? delivery_gain=1;
+final_section_proc_l=delivery_buf_l[delivery_read]*delivery_gain;
+final_section_proc_r=delivery_buf_r[delivery_read]*delivery_gain;
+delivery_required[delivery_read]=1;
+delivery_wrpos+=1; delivery_wrpos>=delivery_buf_len ? delivery_wrpos=0;
+
 meter_final_safety_post = absmax2(final_section_proc_l, final_section_proc_r);
 meter_blk_safety_pre = max(meter_blk_safety_pre, meter_final_safety_pre);
 meter_blk_safety_post = max(meter_blk_safety_post, meter_final_safety_post);
@@ -3673,6 +3856,9 @@ final_section_mode == 3 ? (
 ) : (
   normal_out_l = final_section_proc_l;
   normal_out_r = final_section_proc_r;
+  // Last delivery guard. This is intentionally redundant with the Final/hybrid
+  // safety walls so sample-rate changes, state transitions, or future routing
+  // edits cannot leak a normal-output sample above the configured ceiling.
   normal_out_l = hard_limit(normal_out_l, ceiling);
   normal_out_r = hard_limit(normal_out_r, ceiling);
 );
@@ -3691,12 +3877,24 @@ meter_refresh_count >= 8192 ? (
 );
 
 diag_active ? (
-  spl0 = diag_l;
-  spl1 = diag_r;
+  mode_comp_in_l = diag_l;
+  mode_comp_in_r = diag_r;
 ) : (
-  spl0 = normal_out_l;
-  spl1 = normal_out_r;
+  mode_comp_in_l = normal_out_l;
+  mode_comp_in_r = normal_out_r;
 );
+
+// Pure post-Core timing compensation. The selected mode's total latency remains
+// constant while Auto-Adapt changes the real latency inside that mode.
+mode_comp_buf_lpos = mode_comp_wrpos;
+mode_comp_l[mode_comp_buf_lpos] = mode_comp_in_l;
+mode_comp_r[mode_comp_buf_lpos] = mode_comp_in_r;
+mode_comp_read = mode_comp_buf_lpos - mode_comp_delay_spl;
+mode_comp_read < 0 ? mode_comp_read += mode_comp_buf_len;
+spl0 = mode_comp_l[mode_comp_read];
+spl1 = mode_comp_r[mode_comp_read];
+mode_comp_wrpos += 1;
+mode_comp_wrpos >= mode_comp_buf_len ? mode_comp_wrpos = 0;
 
 gui_peak_in_l_sample = max(gui_peak_in_l_sample, abs(agc_section_in_l));
 gui_peak_in_r_sample = max(gui_peak_in_r_sample, abs(agc_section_in_r));

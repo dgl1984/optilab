@@ -1,4 +1,4 @@
-﻿// Copyright 2026 Lanes Audio
+// Copyright 2026 Lanes Audio
 // SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
@@ -210,7 +210,8 @@ private:
     std::uint32_t editorWidth_ = 600;
     std::uint32_t editorHeight_ = 300;
     std::uint32_t fixedLatency_ = 0;
-    double fixedLatencySampleRate_ = 0.0;
+    int fixedLatencyMode_ = -1;
+    bool latencyRestartRequested_ = false;
     std::vector<float> compensationLeft_;
     std::vector<float> compensationRight_;
     std::size_t compensationWrite_ = 0;
@@ -230,6 +231,12 @@ private:
         return values;
     }
 
+    void requestLatencyRestart() {
+        if (!active_ || latencyRestartRequested_ || !host_ || !host_->request_restart) return;
+        latencyRestartRequested_ = true;
+        host_->request_restart(host_);
+    }
+
     void setAtomicParameter(clap_id id, double value, bool fromEditor) {
         if (id >= parameterCount) return;
         const double clamped = clampParameter(id, value);
@@ -237,6 +244,9 @@ private:
         if (oldValue == clamped) return;
         if (fromEditor) {
             pendingEditorParameters_.fetch_or(1u << id, std::memory_order_release);
+        }
+        if (id == modeParameter) {
+            requestLatencyRestart();
         }
     }
 
@@ -262,6 +272,11 @@ private:
             trackingMeters_ = shouldTrack;
             core_.setActivityTracking(shouldTrack);
         }
+        if (active_ && fixedLatencyMode_ >= 0 &&
+            static_cast<int>(values.mode) != fixedLatencyMode_) {
+            requestLatencyRestart();
+            return;
+        }
         if (!changed) return;
         core_.setParameters(values);
         appliedParameters_ = core_.parameters();
@@ -274,19 +289,17 @@ private:
         parametersApplied_ = true;
     }
 
-    std::uint32_t calculateFixedLatency(double sampleRate) const {
+    std::uint32_t calculateFixedLatency(double sampleRate, int mode) const {
         std::uint32_t maximum = 0;
-        for (int mode = 0; mode < 3; ++mode) {
-            for (double adapt : {0.0, 100.0}) {
-                OptiLabCore probe;
-                auto values = OptiLabCore::defaultParameters(
-                    static_cast<OptiLabCore::Mode>(mode));
-                values.autoAdaptPct = adapt;
-                probe.setParameters(values);
-                probe.prepare(sampleRate);
-                maximum = std::max(
-                    maximum, static_cast<std::uint32_t>(probe.latencySamples()));
-            }
+        for (double adapt : {0.0, 100.0}) {
+            OptiLabCore probe;
+            auto values = OptiLabCore::defaultParameters(
+                static_cast<OptiLabCore::Mode>(mode));
+            values.autoAdaptPct = adapt;
+            probe.setParameters(values);
+            probe.prepare(sampleRate);
+            maximum = std::max(
+                maximum, static_cast<std::uint32_t>(probe.latencySamples()));
         }
         return maximum;
     }
@@ -485,11 +498,11 @@ private:
         appliedParameters_ = core_.parameters();
         parametersApplied_ = true;
         trackingMeters_ = shouldTrack;
-        if (sampleRate != fixedLatencySampleRate_) {
-            fixedLatency_ = calculateFixedLatency(sampleRate);
-            fixedLatencySampleRate_ = sampleRate;
-        }
+        fixedLatencyMode_ = static_cast<int>(appliedParameters_.mode);
+        fixedLatency_ = calculateFixedLatency(sampleRate, fixedLatencyMode_);
+        latencyRestartRequested_ = false;
         const std::size_t coreLatency = core_.latencySamples();
+        if (coreLatency > fixedLatency_) return false;
         compensationDelay_ = fixedLatency_ > coreLatency
                                  ? fixedLatency_ - coreLatency
                                  : 0;
@@ -504,6 +517,8 @@ private:
 
     void deactivate() {
         active_ = false;
+        fixedLatencyMode_ = -1;
+        latencyRestartRequested_ = false;
         compensationLeft_.clear();
         compensationRight_.clear();
         parametersApplied_ = false;
@@ -546,7 +561,10 @@ private:
         if (hostParams_ && hostParams_->rescan) {
             hostParams_->rescan(host_, CLAP_PARAM_RESCAN_VALUES);
         }
-        if (active_ && host_ && host_->request_process) {
+        if (active_ && fixedLatencyMode_ >= 0 &&
+            static_cast<int>(parameterValue(modeParameter)) != fixedLatencyMode_) {
+            requestLatencyRestart();
+        } else if (active_ && host_ && host_->request_process) {
             host_->request_process(host_);
         }
         return true;
