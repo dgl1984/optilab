@@ -2,33 +2,57 @@
 
 ## OptiLab Core v1.3.2
 
-Version 1.3.2 fixes a regression in the **Stream polish** stereo widener, improves final peak protection, and removes unnecessary CLAP delay from the lower-latency modes while keeping the same simple **Mode**, **Input**, and **Auto-Adapt** controls.
+Version 1.3.2 fixes a regression in the **Stream polish** stereo widener,
+improves final peak protection, and removes unnecessary CLAP delay from the
+lower-latency modes while keeping the same simple **Mode**, **Input**, and
+**Auto-Adapt** controls.
 
 ### Stream polish stereo
 
-- Fixed a regression in the stereo widener. The affected version could increase the Side channel simply because more width was requested, even when the source was already wide enough.
-- The widener now has content-aware guards that decide when additional width is actually useful. Already-wide material is less likely to be pushed unnecessarily, while narrower material can still open up naturally.
-- Additional widening is introduced progressively as Auto-Adapt rises instead of being applied indiscriminately.
-- Centered material remains centered; the widener works with the existing stereo information rather than trying to manufacture a new stereo image.
+- Fixed a regression in the stereo widener. The affected version could increase
+  the Side channel simply because more width was requested, even when the source
+  was already wide enough.
+- The widener now has content-aware guards that decide when additional width is
+  actually useful. Already-wide material is less likely to be pushed
+  unnecessarily, while narrower material can still open up naturally.
+- Additional widening is introduced progressively as Auto-Adapt rises instead
+  of being applied indiscriminately.
+- Centered material remains centered; the widener works with the existing stereo
+  information rather than trying to manufacture a new stereo image.
 
 ### Output protection
 
-- Improved the final delivery limiter so it can detect reconstructed or intersample peaks that do not appear in the individual stored samples.
-- This greatly reduces the chance of a nominally safe output developing unexpected peaks when it is later converted between common sample rates such as 44.1 and 48 kHz.
+- Improved the final delivery limiter so it can detect reconstructed or
+  intersample peaks that do not appear in the individual stored samples.
+- This greatly reduces the chance of a nominally safe output developing
+  unexpected peaks when it is later converted between common sample rates such
+  as 44.1 and 48 kHz.
 - The final output target remains **-0.1 dBFS**.
-- The new protection is designed to act only when needed rather than reducing the level of the entire program to create extra headroom.
+- The new protection is designed to act only when needed rather than reducing
+  the level of the entire program to create extra headroom.
 
 ### Latency
 
-- JSFX and CLAP now keep a stable latency appropriate to the selected mode instead of making every CLAP mode inherit Smooth Limiter's longest mastering delay.
-- Podcast Leveler and Stream polish therefore have substantially less unnecessary live-monitoring delay in CLAP.
-- Auto-Adapt can move within a mode without changing the host-reported latency. Changing Mode may require a CLAP host to refresh latency by restarting or reactivating the plug-in.
+- JSFX and CLAP now keep a stable latency appropriate to the selected mode
+  instead of making every CLAP mode inherit Smooth Limiter's longest mastering
+  delay.
+- Podcast Leveler and Stream polish therefore have substantially less
+  unnecessary live-monitoring delay in CLAP.
+- Auto-Adapt can move within a mode without changing the host-reported latency.
+  Changing Mode may require a CLAP host to refresh latency by restarting or
+  reactivating the plug-in.
 
 ### Stereo widener background
 
-OptiLab's widener design follows a long-established broadcast-processing idea: additional stereo difference information should be applied dynamically and restrained when the existing stereo image does not need more enhancement.
+OptiLab's widener design follows a long-established broadcast-processing idea:
+additional stereo difference information should be applied dynamically and
+restrained when the existing stereo image does not need more enhancement.
 
-For historical technical background, see Robert Orban's [US4837824A, "Stereophonic image widening circuit"](https://patents.google.com/patent/US4837824A/en). The cited 1989 patent is long expired and is referenced here as background on the underlying stereo-widening concept, not because OptiLab directly implements the patented circuit.
+For historical technical background, see Robert Orban's
+[US4837824A, "Stereophonic image widening circuit"](https://patents.google.com/patent/US4837824A/en).
+The cited 1989 patent is long expired and is referenced here as background on
+the underlying stereo-widening concept, not because OptiLab directly implements
+the patented circuit.
 
 ## OptiLab Core v1.3.1
 

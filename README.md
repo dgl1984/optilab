@@ -42,21 +42,36 @@ before changing everything else.
 
 ## What is new in v1.3.2
 
-Version 1.3.2 fixes a regression in **Stream polish** stereo widening, improves final peak protection, and removes unnecessary CLAP delay from lower-latency modes without adding new controls.
+Version 1.3.2 fixes a regression in **Stream polish** stereo widening, improves
+final peak protection, and removes unnecessary CLAP delay from lower-latency
+modes without adding new controls.
 
-The affected widener could raise the Side channel too indiscriminately when more width was requested. The restored content-aware guards now restrain already-wide material while still allowing narrower material to open naturally as Auto-Adapt rises.
+The affected widener could raise the Side channel too indiscriminately when more
+width was requested. The restored content-aware guards now restrain already-wide
+material while still allowing narrower material to open naturally as Auto-Adapt
+rises.
 
-Core also now uses reconstruction-aware final delivery limiting to catch intersample peaks that can become actual overs during common sample-rate conversion. The final output target remains **-0.1 dBFS**.
+Core also now uses reconstruction-aware final delivery limiting to catch
+intersample peaks that can become actual overs during common sample-rate
+conversion. The final output target remains **-0.1 dBFS**.
 
-JSFX and CLAP now keep latency fixed within the selected mode. Podcast Leveler and Stream polish therefore no longer inherit Smooth Limiter's much longer mastering delay in CLAP.
+JSFX and CLAP now keep latency fixed within the selected mode. Podcast Leveler
+and Stream polish therefore no longer inherit Smooth Limiter's much longer
+mastering delay in CLAP.
 
 ## Output ceiling and sample rates
 
-OptiLab Core now uses a reconstruction-aware final delivery limiter. In addition to controlling the stored output samples, it detects intersample peaks that can become actual overs when audio is converted between common sample rates such as 44.1 and 48 kHz.
+OptiLab Core now uses a reconstruction-aware final delivery limiter. In addition
+to controlling the stored output samples, it detects intersample peaks that can
+become actual overs when audio is converted between common sample rates such as
+44.1 and 48 kHz.
 
-The final output target remains **-0.1 dBFS**. The delivery limiter is designed to act only when reconstruction-aware peak safety requires it rather than lowering the entire program for extra headroom.
+The final output target remains **-0.1 dBFS**. The delivery limiter is designed
+to act only when reconstruction-aware peak safety requires it rather than
+lowering the entire program for extra headroom.
 
-Downstream processing, unusual resamplers, and lossy codecs can still alter peaks after Core, so measuring the final delivered file remains good practice.
+Downstream processing, unusual resamplers, and lossy codecs can still alter peaks
+after Core, so measuring the final delivered file remains good practice.
 
 ## Downloads
 
@@ -69,7 +84,9 @@ what you have — no extraction needed:
 - `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
 - `optilab_core.jsfx` — drop-in replacement for REAPER users.
 
-**Complete Package:** Download `OptiLab-Core-1.3.2.zip` to get all three plug-in formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`), documentation, and SHA-256 checksums in a single archive.
+**Complete Package:** Download `OptiLab-Core-1.3.2.zip` to get all three plug-in
+formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`),
+documentation, and SHA-256 checksums in a single archive.
 
 ## REAPER installation
 
@@ -81,7 +98,8 @@ what you have — no extraction needed:
 
 ## CLAP installation
 
-1. Download `OptiLab-Core-1.3.2.zip` (and extract `OptiLab_Core.clap`), or download `OptiLab_Core.clap` directly.
+1. Download `OptiLab-Core-1.3.2.zip` (and extract `OptiLab_Core.clap`), or
+   download `OptiLab_Core.clap` directly.
 2. Close the CLAP host.
 3. Copy `OptiLab_Core.clap` to
    `%LOCALAPPDATA%\Programs\Common\CLAP`.
@@ -96,7 +114,8 @@ The Windows DLL uses the classic 32-bit Winamp DSP/Effect interface. It can be
 used by Winamp and by compatible Windows broadcast applications that support
 Winamp DSP plug-ins.
 
-1. Download `OptiLab-Core-1.3.2.zip` (and extract `dsp_optilab_core.dll`), or download `dsp_optilab_core.dll` directly.
+1. Download `OptiLab-Core-1.3.2.zip` (and extract `dsp_optilab_core.dll`), or
+   download `dsp_optilab_core.dll` directly.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
 4. Restart the host and select **OptiLab Core 1.3.2** in its DSP configuration.
@@ -129,10 +148,21 @@ Questions, bug reports, and accessibility feedback: `info@lanesaudio.com`
 
 ## License
 
-OptiLab Core v1.3.0 and later are **source-available** under the Apache License 2.0 with the Commons Clause License Condition v1.0. See [LICENSE](LICENSE).
+OptiLab Core v1.3.0 and later are **source-available** under the Apache License
+2.0 with the Commons Clause License Condition v1.0. See [LICENSE](LICENSE).
 
-You are explicitly welcome to use OptiLab Core for personal or commercial **audio work**. This includes paid production and mastering, commercial radio and broadcasting, monetized streams and podcasts, released music, and similar work. Lanes Audio claims no royalty or ownership interest in audio merely because OptiLab Core processed it.
+You are explicitly welcome to use OptiLab Core for personal or commercial
+**audio work**. This includes paid production and mastering, commercial radio
+and broadcasting, monetized streams and podcasts, released music, and similar
+work. Lanes Audio claims no royalty or ownership interest in audio merely
+because OptiLab Core processed it.
 
-The source may be inspected, studied, modified, and redistributed subject to the license. However, the license does **not** permit selling OptiLab Core itself, a rebranded or lightly modified version of it, or another product or service whose value derives entirely or substantially from OptiLab Core's software functionality. Contact `info@lanesaudio.com` to discuss a separate commercial software license.
+The source may be inspected, studied, modified, and redistributed subject to the
+license. However, the license does **not** permit selling OptiLab Core itself, a
+rebranded or lightly modified version of it, or another product or service whose
+value derives entirely or substantially from OptiLab Core's software
+functionality. Contact `info@lanesaudio.com` to discuss a separate commercial
+software license.
 
-OptiLab Core releases published before v1.3.0 remain under the license terms under which those versions were originally released.
+OptiLab Core releases published before v1.3.0 remain under the license terms
+under which those versions were originally released.
