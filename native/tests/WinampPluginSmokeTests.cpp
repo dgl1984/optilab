@@ -120,8 +120,17 @@ int wmain(int argc, wchar_t** argv) {
     module->hwndParent = suppliedParent;
     std::thread configThread([module] { module->config(module); });
     HWND configDialog = nullptr;
+    const std::array<int, 3> meterLabels{IDC_INPUT_PEAK, IDC_OUTPUT_PEAK, IDC_FULL_SCALE};
     for (int attempt = 0; attempt < 100 && !configDialog; ++attempt) {
         configDialog = FindWindowW(L"#32770", L"OptiLab Core Settings");
+        if (configDialog) {
+            const bool controlsReady = std::all_of(
+                meterLabels.begin(), meterLabels.end(),
+                [configDialog](int id) { return GetDlgItem(configDialog, id) != nullptr; });
+            if (!controlsReady) {
+                configDialog = nullptr;
+            }
+        }
         if (!configDialog) {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
@@ -145,7 +154,6 @@ int wmain(int argc, wchar_t** argv) {
     if (IsDlgButtonChecked(configDialog, IDC_VISUAL_METERS) == BST_CHECKED) {
         SendDlgItemMessageW(configDialog, IDC_VISUAL_METERS, BM_CLICK, 0, 0);
     }
-    const std::array<int, 3> meterLabels{IDC_INPUT_PEAK, IDC_OUTPUT_PEAK, IDC_FULL_SCALE};
     for (const int id : meterLabels) {
         const HWND label = GetDlgItem(configDialog, id);
         if (!label) {

@@ -42,23 +42,23 @@ before changing everything else.
 
 ## What is new in v1.4.0
 
-Version 1.4.0 makes the top of **Stream polish Auto-Adapt** more effective on
-sustained program material without adding controls or changing the final
-delivery target.
+Version 1.4.0 strengthens the upper end of **Stream polish Auto-Adapt**. At
+100%, it can produce more sustained loudness and firmer high-frequency control
+on real program material without adding controls or changing the final delivery
+target.
 
-At higher settings, the upper band progressively gains independent detection,
-and qualified real program can slowly move the AGC target from -17 dB toward
--14 dB. If sustained Final-limiter work becomes excessive, Core coordinates the
-stages instead of letting them fight: it modestly yields the AGC lift, eases the
-effective Final threshold, and withdraws the existing positive bass assist.
+High Auto-Adapt settings can bring sustained material forward more noticeably,
+while bright events receive more independent control. If final limiting remains
+heavy, Core automatically eases the lift and withdraws positive bass assistance
+instead of allowing the stages to fight or become unnecessarily crushed.
 
-Silence, rumble, and sub-gate noise do not train the slow loudness lift. The
-response is introduced continuously across the Auto-Adapt range rather than at
-one abrupt slider point. The final output target remains **-0.1 dBFS**.
+Silence, low-level noise, and rumble do not cause the slow loudness lift to
+build. The response is blended continuously across the Auto-Adapt range rather
+than switching abruptly. The final output target remains **-0.1 dBFS**.
 
-The Winamp-compatible Settings dialog also opens independently to reduce
-StationPlaylist/NVDA focus conflicts, and its optional meters avoid redundant
-accessible label updates.
+For StationPlaylist compatibility, the Settings window now opens independently
+of the host's Preferences page to avoid focus and speech conflicts with NVDA.
+Its optional meters also avoid redundant accessible label updates.
 
 ## Output ceiling and sample rates
 
@@ -99,7 +99,7 @@ documentation, and SHA-256 checksums in a single archive.
 
 ## CLAP installation
 
-1. Download `OptiLab-Core-1.3.2.zip` (and extract `OptiLab_Core.clap`), or
+1. Download `OptiLab-Core-1.4.0.zip` (and extract `OptiLab_Core.clap`), or
    download `OptiLab_Core.clap` directly.
 2. Close the CLAP host.
 3. Copy `OptiLab_Core.clap` to
@@ -109,23 +109,24 @@ documentation, and SHA-256 checksums in a single archive.
 See [`native/CLAP.md`](native/CLAP.md) for controls, accessibility, build
 instructions, and host behavior.
 
-## Winamp-compatible DSP installation and use
+## StationPlaylist and Winamp-compatible DSP installation and use
 
 The Windows DLL uses the classic 32-bit Winamp DSP/Effect interface. It can be
 used by Winamp and by compatible Windows broadcast applications that support
 Winamp DSP plug-ins.
 
-1. Download `OptiLab-Core-1.3.2.zip` (and extract `dsp_optilab_core.dll`), or
+1. Download `OptiLab-Core-1.4.0.zip` (and extract `dsp_optilab_core.dll`), or
    download `dsp_optilab_core.dll` directly.
 2. Close the host application.
 3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
-4. Restart the host and select **OptiLab Core 1.3.2** in its DSP configuration.
+4. Restart the host and select **OptiLab Core 1.4.0** in its DSP configuration.
 
 Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
 require administrator approval. Other hosts choose their own plug-in folders.
 
-The configuration window uses standard Windows controls with keyboard access,
-normal focus indication, and screen-reader-friendly labels. See
+The configuration window opens independently of StationPlaylist's Preferences
+page and uses standard Windows controls with keyboard access, normal focus
+indication, and screen-reader-friendly labels. See
 [`native/WINAMP.md`](native/WINAMP.md) for complete details and troubleshooting.
 
 Use the Winamp DSP the same way you use the JSFX: choose a mode, set Input so

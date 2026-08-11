@@ -3,13 +3,13 @@
 // @author LanesAudio
 // @about
 //   OptiLab Core is a three-control broadcast and mastering processor.
-//   v1.4.0 strengthens high Auto-Adapt loudness while coordinating AGC, upper-band control, and Final load.
+//   v1.4.0 makes high Stream polish Auto-Adapt stronger while coordinating loudness and final-stage load.
 // @changelog
 //   v1.4.0
-//   - Added progressive independent band-six detection at higher Stream polish Auto-Adapt settings.
-//   - Added a slow, program-qualified AGC target lift from -17 dB toward -14 dB.
-//   - Coordinated sustained Final load with AGC relief, effective-threshold backoff, and withdrawal of positive bass assist.
-//   - Kept silence, rumble, and sub-gate noise from training the slow Adapt response.
+//   - Made 100% Auto-Adapt capable of more sustained loudness on qualifying program material.
+//   - Added more independent control of bright and high-frequency events.
+//   - Coordinated sustained final-stage load with loudness relief and withdrawal of positive bass assist.
+//   - Kept silence, rumble, and low-level noise from building the slow loudness lift.
 //   - Preserved continuous slider staging, the -0.1 dBFS final target, and the three-control workflow.
 //   v1.3.2
 //   - Fixed a Stream polish stereo-widener regression that could raise the Side channel too indiscriminately.

@@ -12,9 +12,11 @@ version, Windows version, audio format, and result for every test run.
 ## Installation and accessibility
 
 - [ ] The host discovers `dsp_optilab_core.dll` after a full restart.
-- [ ] The plug-in is identified as **OptiLab Core 1.2.0** in the host's DSP
+- [ ] The plug-in is identified as **OptiLab Core 1.4.0** in the host's DSP
       list.
 - [ ] The settings dialog opens from the host's DSP configuration.
+- [ ] In StationPlaylist Studio, the Settings window opens independently of
+      the host's Preferences page and leaves that page enabled.
 - [ ] Every control is announced correctly by the screen reader (NVDA / JAWS).
 - [ ] Tab, Shift+Tab, Alt access keys, Enter, and Escape work as expected.
 - [ ] Invalid numeric values produce a readable warning and return focus to the
@@ -41,7 +43,7 @@ version, Windows version, audio format, and result for every test run.
 - [ ] Any ceiling overshoot after host sample-rate conversion is recorded
       separately from the same-rate result.
 
-### Mode defaults (Winamp DSP, v1.2.0)
+### Mode defaults (StationPlaylist / Winamp DSP, v1.4.0)
 
 - [ ] Podcast Leveler defaults to **+3.5 dB** Input and **0 %** Auto-Adapt.
 - [ ] Stream polish defaults to **+1.0 dB** Input and **0 %** Auto-Adapt.

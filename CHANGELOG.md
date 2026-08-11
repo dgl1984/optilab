@@ -2,30 +2,32 @@
 
 ## OptiLab Core v1.4.0
 
-Version 1.4.0 makes the upper end of **Stream polish Auto-Adapt** more
-effective on sustained program material while preserving the same three-control
-workflow and **-0.1 dBFS** final delivery target.
+Version 1.4.0 strengthens the upper end of **Stream polish Auto-Adapt**. At
+100%, Auto-Adapt can now produce more sustained loudness and firmer
+high-frequency control on real program material, while automatically easing
+back when the final stage is working too hard.
 
-### Stronger, coordinated high-Adapt processing
+### Stronger Auto-Adapt
 
-- At higher Auto-Adapt settings, band six progressively uses its own detector
-  so sustained upper-band energy is controlled even when the adjacent band is
-  comparatively quiet.
-- On qualified program material, Auto-Adapt can slowly lift the Stream polish
-  AGC target from -17 dB toward -14 dB for greater sustained loudness.
-- When cumulative Final-limiter load stays high, Core coordinates the stages:
-  it eases the effective Final threshold, yields the AGC lift slightly, and
-  withdraws the existing positive Foundation Feedback bass assist.
-- The response is continuous across the Auto-Adapt range; there is no abrupt
-  behavior change at a single slider position.
-- Silence, sub-gate noise, and rumble are excluded from teaching the slow AGC
-  lift or Final-load feedback.
+- High Auto-Adapt settings can bring sustained program material forward more
+  noticeably without simply driving every stage harder.
+- Bright and high-frequency events now receive more independent control, so
+  they are less likely to pass through because a neighboring band is quiet.
+- The slow loudness lift responds only to qualifying program material. Silence,
+  low-level noise, and rumble do not cause it to build gain.
+- When final limiting remains heavy, Core automatically reduces the lift and
+  withdraws positive bass assistance. This prevents stages from fighting each
+  other or making the result unnecessarily crushed.
+- The behavior is blended continuously across the Auto-Adapt range, with no
+  abrupt switch at a particular setting.
+- The existing Mode, Input, and Auto-Adapt workflow and the **-0.1 dBFS** final
+  delivery target are unchanged.
 
-### Winamp-compatible accessibility
+### StationPlaylist compatibility and accessibility
 
-- The Settings dialog now opens as an independent, centered native window to
-  avoid focus and speech conflicts in hosts such as StationPlaylist when used
-  with NVDA.
+- The Settings window now opens independently of the host's Preferences page,
+  helping avoid the focus and speech conflict observed with StationPlaylist
+  Studio and NVDA.
 - With visual meters disabled, Core no longer runs the meter timer or repeatedly
   rewrites accessible meter labels.
 - With meters enabled, unchanged labels and progress positions are left alone,

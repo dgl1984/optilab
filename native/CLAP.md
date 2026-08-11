@@ -29,7 +29,7 @@ Create a version-checked candidate ZIP and SHA-256 file with:
 CI verifies that the module is x64, exports `clap_entry`, and has no dynamic
 Microsoft C/C++ runtime dependency before uploading the candidate artifact.
 For version tags, the release job downloads that exact tested artifact and
-publishes the unified release package `OptiLab-Core-1.3.2.zip` along with the
+publishes the unified release package `OptiLab-Core-1.4.0.zip` along with the
 direct plug-in assets.
 
 The CLAP smoke test loads the built module through `clap_entry` and verifies:

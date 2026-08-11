@@ -9,12 +9,16 @@ The Winamp plug-in keeps the same simple Core idea: choose a mode, set the input
 drive, and optionally raise Auto-adapt for more automatic leveling, tone
 balancing, and protection.
 
-## Controls and accessibility
+## StationPlaylist compatibility and accessibility
 
 The settings window uses standard Windows dialog controls only. It supports
 screen-reader control names, Tab and Shift+Tab navigation, Alt access keys,
 native focus indication, Enter for OK, and Escape for Cancel. It has no custom
 drawing, unlabeled graphics, or mouse-only controls.
+
+In StationPlaylist Studio, the Settings window opens independently of the
+host's Preferences page. This avoids disabling the transient Preferences page
+and helps prevent the associated NVDA focus and speech conflict.
 
 - **Mode:** Podcast Leveler, Stream polish, or Smooth Limiter
 - **Input drive:** -12.0 through +18.0 dB
@@ -35,12 +39,16 @@ HKEY_CURRENT_USER\Software\LanesAudio\OptiLab Core\Winamp DSP\<host.exe>
 
 No administrator access is needed to save settings.
 
+When visual meters are off, Core does not run the meter timer or repeatedly
+rewrite the accessible meter labels. When meters are on, unchanged text and
+progress positions are left alone to reduce redundant accessibility events.
+
 ## Installation
 
 1. Close the audio host.
 2. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
 3. Restart the host.
-4. Open its DSP/Effect configuration and select **OptiLab Core 1.3.2**.
+4. Open its DSP/Effect configuration and select **OptiLab Core 1.4.0**.
 5. Click **Configure** to choose the mode, Input drive, and Auto-adapt amount.
 
 Classic Winamp normally uses:
@@ -78,7 +86,7 @@ If the plug-in does not appear:
 2. Confirm that the DLL is in the exact folder configured by that host.
 3. Fully close and restart the host after copying the DLL.
 4. Check the DLL Properties > Details page for Company `LanesAudio` and Product
-   version `1.3.2`.
+   version `1.4.0`.
 5. Remove older copies from other plug-in folders to avoid loading the wrong DLL.
 
 The Release DLL statically links the Microsoft C/C++ runtime, so a separate

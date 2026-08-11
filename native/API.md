@@ -1,13 +1,12 @@
 # OptiLab Core Native API
 
-OptiLab Core v1.2.0 includes a framework-independent C++17 static library named
-`optilab-core`. It is the same processing engine used by the CLAP and Winamp
-plug-in wrappers.
+OptiLab Core includes a framework-independent C++17 static library named
+`optilab-core`, first introduced in v1.2.0. It is the same processing engine
+used by the CLAP and StationPlaylist/Winamp plug-in wrappers.
 
 This is a C++ API, not a stable C ABI. If you need to call OptiLab Core from C,
 Rust, C#, Python, or another language, wrap this C++ class in a small adapter
-owned by your project. A stable exported C API may be added in a later release,
-but v1.2.0 does not promise one.
+owned by your project. Version 1.4.0 does not promise a stable exported C API.
 
 ## Files
 
@@ -91,7 +90,7 @@ Use `OptiLabCore::defaultParameters(mode)` to get the recommended starting
 values for a mode. Current defaults:
 
 - Podcast Leveler: `inputDriveDb = 3.5`, `autoAdaptPct = 0.0`
-- Stream polish: `inputDriveDb = 4.5`, `autoAdaptPct = 0.0`
+- Stream polish: `inputDriveDb = 0.0`, `autoAdaptPct = 0.0`
 - Smooth Limiter: `inputDriveDb = 0.0`, `autoAdaptPct = 0.0`
 
 Supported ranges:
@@ -128,9 +127,10 @@ Call `latencySamples()` after `prepare()` and `setParameters()` to get the
 current processor latency in samples. Hosts that support plug-in delay
 compensation should report this value.
 
-Latency can change when mode or Auto-Adapt changes because lookahead-related
-stages are mode-dependent. If your host exposes latency to another system, check
-the value after parameter changes.
+Latency can change when Mode changes because lookahead-related stages are
+mode-dependent. Auto-Adapt changes do not change the reported latency within a
+mode. If your host exposes latency to another system, refresh it after Mode
+changes.
 
 ## Real-time behavior
 
@@ -156,7 +156,7 @@ and lookahead stages will not settle normally.
 
 ## Versioning note
 
-The v1.2.0 C++ API is small and practical, but it should not yet be treated as a
+The v1.4.0 C++ API is small and practical, but it should not yet be treated as a
 long-term binary compatibility promise. Prefer rebuilding against the matching
 release source rather than mixing headers and libraries from different OptiLab
 Core versions.
