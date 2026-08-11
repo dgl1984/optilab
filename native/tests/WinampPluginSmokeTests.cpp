@@ -4,10 +4,13 @@
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
 #include "WinampDspApi.h"
 #include "OptiLabVersion.h"
+#include "resource.h"
 
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -15,12 +18,23 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
 
 #define OPTILAB_WIDEN_IMPL(value) L##value
 #define OPTILAB_WIDEN(value) OPTILAB_WIDEN_IMPL(value)
+
+std::atomic<int> meterTextWrites{0};
+WNDPROC originalStaticWindowProc = nullptr;
+
+LRESULT CALLBACK meterStaticWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_SETTEXT) {
+        meterTextWrites.fetch_add(1, std::memory_order_relaxed);
+    }
+    return CallWindowProcW(originalStaticWindowProc, window, message, wParam, lParam);
+}
 
 bool hasExpectedVersionInfo(const wchar_t* path) {
     DWORD ignored = 0;
@@ -80,7 +94,8 @@ int wmain(int argc, wchar_t** argv) {
     WinampDspHeader* header = getHeader();
     WinampDspModule* module = header && header->getModule ? header->getModule(0) : nullptr;
     if (!header || header->version != winampDspHeaderVersion || !module ||
-        !module->init || !module->modifySamples || !module->quit || header->getModule(1)) {
+        !module->config || !module->init || !module->modifySamples || !module->quit ||
+        header->getModule(1)) {
         std::cerr << "FAIL: invalid Winamp DSP header or module\n";
         FreeLibrary(library);
         return 1;
@@ -92,6 +107,83 @@ int wmain(int argc, wchar_t** argv) {
         FreeLibrary(library);
         return 1;
     }
+
+    HWND suppliedParent = CreateWindowExW(
+        0, L"STATIC", L"Host Preferences", WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT, 320, 240, nullptr, nullptr,
+        GetModuleHandleW(nullptr), nullptr);
+    if (!suppliedParent) {
+        std::cerr << "FAIL: could not create Winamp host test window\n";
+        FreeLibrary(library);
+        return 1;
+    }
+    module->hwndParent = suppliedParent;
+    std::thread configThread([module] { module->config(module); });
+    HWND configDialog = nullptr;
+    for (int attempt = 0; attempt < 100 && !configDialog; ++attempt) {
+        configDialog = FindWindowW(L"#32770", L"OptiLab Core Settings");
+        if (!configDialog) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    }
+    if (!configDialog) {
+        std::cerr << "FAIL: Winamp settings dialog did not open\n";
+        // The process owns the remaining lifetime in this exceptional path.
+        // Do not unload the DLL under a possibly still-running config call.
+        configThread.detach();
+        DestroyWindow(suppliedParent);
+        return 1;
+    }
+    if (GetWindow(configDialog, GW_OWNER) != nullptr || !IsWindowEnabled(suppliedParent)) {
+        std::cerr << "FAIL: Winamp settings dialog is still attached to host Preferences\n";
+        PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+        configThread.join();
+        DestroyWindow(suppliedParent);
+        FreeLibrary(library);
+        return 1;
+    }
+    if (IsDlgButtonChecked(configDialog, IDC_VISUAL_METERS) == BST_CHECKED) {
+        SendDlgItemMessageW(configDialog, IDC_VISUAL_METERS, BM_CLICK, 0, 0);
+    }
+    const std::array<int, 3> meterLabels{IDC_INPUT_PEAK, IDC_OUTPUT_PEAK, IDC_FULL_SCALE};
+    for (const int id : meterLabels) {
+        const HWND label = GetDlgItem(configDialog, id);
+        if (!label) {
+            std::cerr << "FAIL: Winamp settings meter label missing\n";
+            PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+            configThread.join();
+            DestroyWindow(suppliedParent);
+            FreeLibrary(library);
+            return 1;
+        }
+        const auto previous = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
+            label, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(meterStaticWindowProc)));
+        if (!previous) {
+            std::cerr << "FAIL: could not monitor Winamp settings meter label\n";
+            PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+            configThread.join();
+            DestroyWindow(suppliedParent);
+            FreeLibrary(library);
+            return 1;
+        }
+        if (!originalStaticWindowProc) {
+            originalStaticWindowProc = previous;
+        }
+    }
+    meterTextWrites.store(0, std::memory_order_relaxed);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    if (meterTextWrites.load(std::memory_order_relaxed) != 0) {
+        std::cerr << "FAIL: disabled visual meters still rewrite accessible labels\n";
+        PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+        configThread.join();
+        DestroyWindow(suppliedParent);
+        FreeLibrary(library);
+        return 1;
+    }
+    PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+    configThread.join();
+    module->hwndParent = nullptr;
+    DestroyWindow(suppliedParent);
 
     constexpr int frames = 2048;
     std::vector<std::int16_t> samples(frames * 2);

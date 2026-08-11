@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cwchar>
 #include <mutex>
+#include <utility>
 
 namespace {
 
@@ -177,7 +178,11 @@ void setPeakText(HWND dialog, int control, const wchar_t* label, int milliDb) {
     } else {
         std::swprintf(text, std::size(text), L"%ls: %.1f dBFS", label, milliDb / 1000.0);
     }
-    SetDlgItemTextW(dialog, control, text);
+    wchar_t current[80]{};
+    GetDlgItemTextW(dialog, control, current, static_cast<int>(std::size(current)));
+    if (std::wcscmp(current, text) != 0) {
+        SetDlgItemTextW(dialog, control, text);
+    }
 }
 
 int meterPosition(int milliDb) noexcept {
@@ -193,11 +198,24 @@ void setMeterVisibility(HWND dialog, bool enabled) {
 }
 
 void setMetersOffText(HWND dialog) {
-    SetDlgItemTextW(dialog, IDC_INPUT_PEAK, L"Input peak: visual meters off");
-    SetDlgItemTextW(dialog, IDC_OUTPUT_PEAK, L"Output peak: visual meters off");
-    SetDlgItemTextW(dialog, IDC_FULL_SCALE, L"Full scale: visual meters off");
-    SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETPOS, 0, 0);
-    SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_SETPOS, 0, 0);
+    constexpr std::array<std::pair<int, const wchar_t*>, 3> labels{{
+        {IDC_INPUT_PEAK, L"Input peak: visual meters off"},
+        {IDC_OUTPUT_PEAK, L"Output peak: visual meters off"},
+        {IDC_FULL_SCALE, L"Full scale: visual meters off"},
+    }};
+    for (const auto& [control, text] : labels) {
+        wchar_t current[80]{};
+        GetDlgItemTextW(dialog, control, current, static_cast<int>(std::size(current)));
+        if (std::wcscmp(current, text) != 0) {
+            SetDlgItemTextW(dialog, control, text);
+        }
+    }
+    if (SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_GETPOS, 0, 0) != 0) {
+        SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETPOS, 0, 0);
+    }
+    if (SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_GETPOS, 0, 0) != 0) {
+        SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_SETPOS, 0, 0);
+    }
 }
 
 void updateMeters(HWND dialog) {
@@ -213,10 +231,16 @@ void updateMeters(HWND dialog) {
 
     setPeakText(dialog, IDC_INPUT_PEAK, L"Input peak", input);
     setPeakText(dialog, IDC_OUTPUT_PEAK, L"Output peak", output);
-    SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETPOS,
-                        static_cast<WPARAM>(meterPosition(input)), 0);
-    SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_SETPOS,
-                        static_cast<WPARAM>(meterPosition(output)), 0);
+    const int inputPosition = meterPosition(input);
+    const int outputPosition = meterPosition(output);
+    if (SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_GETPOS, 0, 0) != inputPosition) {
+        SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETPOS,
+                            static_cast<WPARAM>(inputPosition), 0);
+    }
+    if (SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_GETPOS, 0, 0) != outputPosition) {
+        SendDlgItemMessageW(dialog, IDC_OUTPUT_METER, PBM_SETPOS,
+                            static_cast<WPARAM>(outputPosition), 0);
+    }
 
     wchar_t text[80]{};
     if (fullScale > 0) {
@@ -224,7 +248,11 @@ void updateMeters(HWND dialog) {
     } else {
         std::swprintf(text, std::size(text), L"Full scale: none");
     }
-    SetDlgItemTextW(dialog, IDC_FULL_SCALE, text);
+    wchar_t current[80]{};
+    GetDlgItemTextW(dialog, IDC_FULL_SCALE, current, static_cast<int>(std::size(current)));
+    if (std::wcscmp(current, text) != 0) {
+        SetDlgItemTextW(dialog, IDC_FULL_SCALE, text);
+    }
 }
 
 void populateDialog(HWND dialog, DialogSettings& settings) {
@@ -273,7 +301,9 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         settings = reinterpret_cast<DialogSettings*>(lParam);
         SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(settings));
         populateDialog(dialog, *settings);
-        SetTimer(dialog, meterTimerId, meterTimerMs, nullptr);
+        if (settings->visualMeters) {
+            SetTimer(dialog, meterTimerId, meterTimerMs, nullptr);
+        }
         return TRUE;
     }
     if (message == WM_TIMER && wParam == meterTimerId) {
@@ -307,12 +337,18 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         setInputText(dialog, settings->inputTenths);
         SetDlgItemInt(dialog, IDC_AUTO_ADAPT, 0, FALSE);
         CheckDlgButton(dialog, IDC_VISUAL_METERS, BST_UNCHECKED);
+        KillTimer(dialog, meterTimerId);
         setMeterVisibility(dialog, false);
         updateMeters(dialog);
         return TRUE;
     }
     if (control == IDC_VISUAL_METERS && HIWORD(wParam) == BN_CLICKED) {
         settings->visualMeters = IsDlgButtonChecked(dialog, IDC_VISUAL_METERS) == BST_CHECKED;
+        if (settings->visualMeters) {
+            SetTimer(dialog, meterTimerId, meterTimerMs, nullptr);
+        } else {
+            KillTimer(dialog, meterTimerId);
+        }
         setMeterVisibility(dialog, settings->visualMeters);
         updateMeters(dialog);
         return TRUE;
@@ -346,8 +382,13 @@ void configure(WinampDspModule* module) {
         targetAdaptPercent.load(std::memory_order_relaxed),
         targetVisualMeters.load(std::memory_order_relaxed) != 0,
     };
-    const HWND parent = module ? module->hwndParent : nullptr;
-    if (DialogBoxParamW(instanceHandle, MAKEINTRESOURCEW(IDD_OPTILAB_CONFIG), parent,
+    // A number of Winamp-compatible hosts provide a transient Preferences page
+    // as hwndParent rather than a stable top-level host window. Owning a modal
+    // dialog with that page disables it and can confuse host-specific screen
+    // reader focus handling. Keep Core's native settings dialog independent,
+    // as established Winamp DSP configuration windows normally appear.
+    (void)module;
+    if (DialogBoxParamW(instanceHandle, MAKEINTRESOURCEW(IDD_OPTILAB_CONFIG), nullptr,
                         configDialogProc, reinterpret_cast<LPARAM>(&settings)) == IDOK) {
         targetMode.store(settings.mode, std::memory_order_relaxed);
         targetInputTenths.store(settings.inputTenths, std::memory_order_relaxed);

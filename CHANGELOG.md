@@ -1,5 +1,43 @@
 # Changelog
 
+## OptiLab Core v1.4.0
+
+Version 1.4.0 makes the upper end of **Stream polish Auto-Adapt** more
+effective on sustained program material while preserving the same three-control
+workflow and **-0.1 dBFS** final delivery target.
+
+### Stronger, coordinated high-Adapt processing
+
+- At higher Auto-Adapt settings, band six progressively uses its own detector
+  so sustained upper-band energy is controlled even when the adjacent band is
+  comparatively quiet.
+- On qualified program material, Auto-Adapt can slowly lift the Stream polish
+  AGC target from -17 dB toward -14 dB for greater sustained loudness.
+- When cumulative Final-limiter load stays high, Core coordinates the stages:
+  it eases the effective Final threshold, yields the AGC lift slightly, and
+  withdraws the existing positive Foundation Feedback bass assist.
+- The response is continuous across the Auto-Adapt range; there is no abrupt
+  behavior change at a single slider position.
+- Silence, sub-gate noise, and rumble are excluded from teaching the slow AGC
+  lift or Final-load feedback.
+
+### Winamp-compatible accessibility
+
+- The Settings dialog now opens as an independent, centered native window to
+  avoid focus and speech conflicts in hosts such as StationPlaylist when used
+  with NVDA.
+- With visual meters disabled, Core no longer runs the meter timer or repeatedly
+  rewrites accessible meter labels.
+- With meters enabled, unchanged labels and progress positions are left alone,
+  reducing redundant accessibility events.
+
+### Validation
+
+- Added native tests for smooth band-six control, coordinated Final-load
+  feedback, sub-gate noise rejection, and retained loudness headroom.
+- Expanded the Windows Winamp smoke test to verify independent dialog ownership
+  and quiet meter-label behavior.
+
 ## OptiLab Core v1.3.2
 
 Version 1.3.2 fixes a regression in the **Stream polish** stereo widener,

@@ -1,10 +1,16 @@
 // @description OptiLab Core
-// @version 1.3.2
+// @version 1.4.0
 // @author LanesAudio
 // @about
 //   OptiLab Core is a three-control broadcast and mastering processor.
-//   v1.3.2 restores content-aware stereo widening and adds reconstruction-aware final delivery protection.
+//   v1.4.0 strengthens high Auto-Adapt loudness while coordinating AGC, upper-band control, and Final load.
 // @changelog
+//   v1.4.0
+//   - Added progressive independent band-six detection at higher Stream polish Auto-Adapt settings.
+//   - Added a slow, program-qualified AGC target lift from -17 dB toward -14 dB.
+//   - Coordinated sustained Final load with AGC relief, effective-threshold backoff, and withdrawal of positive bass assist.
+//   - Kept silence, rumble, and sub-gate noise from training the slow Adapt response.
+//   - Preserved continuous slider staging, the -0.1 dBFS final target, and the three-control workflow.
 //   v1.3.2
 //   - Fixed a Stream polish stereo-widener regression that could raise the Side channel too indiscriminately.
 //   - Restored content-aware widening guards so already-wide material is restrained while useful narrower material can open naturally.
@@ -27,7 +33,7 @@
 // @license Apache-2.0 with Commons Clause (https://commonsclause.com/). See LICENSE.
 // @provides
 //   optilab_core.jsfx
-desc:OptiLab Core v1.3.2 (LanesAudio)
+desc:OptiLab Core v1.4.0 (LanesAudio)
 
 slider1:core_mode=0<0,2,1{Podcast Leveler,Stream polish,Smooth Limiter}>Mode
 slider2:input_drive_db=3.5<-12,18,0.1>Input Drive dB
@@ -43,6 +49,11 @@ ext_tail_size = -2;
 
 agc_lgain = 1;
 agc_hgain = 1;
+agc_lift_state_db = 0;
+final_backoff_db = 0;
+final_foundation_burden = 0;
+final_load_counter = 0;
+startup_activity = 0;
 final_threshold_drive_s = 1;
 final_threshold_guard_gain = 1;
 
@@ -466,6 +477,12 @@ function reset_dynamic_state() local(i)
 
   agc_lgain = 1;
   agc_hgain = 1;
+  agc_lift_state_db = 0;
+  final_backoff_db = 0;
+  final_foundation_burden = 0;
+  final_load_counter = 0;
+  startup_activity = 0;
+  agc_target = db2lin(-17);
   gate_prog_env = 0;
   gate_state = 0;
   gate_closed_memory = 0;
@@ -1029,7 +1046,12 @@ function update_derived_params() local(dpos dneg)
   gate_reopen_strength = gate_reopen_strength_pct * 0.01;
   gate_reopen_speed_sec = max(gate_reopen_speed_ms * 0.001, 0.005);
   gate_lin = db2lin(gate_threshold_db);
-  agc_target = db2lin(-17);
+  agc_lift_state_db = clamp(agc_lift_state_db, 0, stream_agc_lift_target_db);
+  final_backoff_mix <= 0.0000001 ? final_backoff_db = 0;
+  final_backoff_db = clamp(final_backoff_db, 0, 2 * final_backoff_mix);
+  final_foundation_burden = clamp(final_backoff_db / 0.60, 0, 1);
+  agc_target = db2lin(-17 + agc_lift_state_db - 0.35 * final_backoff_db);
+  final_threshold_drive_target = db2lin(-min(0, final_threshold_db + 0.90 * final_backoff_db));
   agc_max_gain = db2lin(agc_max_gain_db);
   agc_min_gain = db2lin(-14);
 
@@ -1063,6 +1085,11 @@ function update_derived_params() local(dpos dneg)
   upper_band_attack = exp(-1/(srate_safe * 0.0024));
   upper_mid_band_attack = exp(-1/(srate_safe * 0.0018));
   agc_release = exp(-1/(srate_safe * (0.080 + release_time * 0.085)));
+  agc_lift_attack_tick = exp(-64/max(1, srate_safe * 6.0));
+  agc_lift_release_tick = exp(-64/max(1, srate_safe * 1.5));
+  final_backoff_attack_tick = exp(-64/max(1, srate_safe * 1.8));
+  final_backoff_release_tick = exp(-64/max(1, srate_safe * 8.0));
+  startup_activity_release = exp(-1/max(1, srate_safe * 0.350));
   agc_release_slow = exp(-1/(srate_safe * (0.240 + release_time * 0.150)));
   band_release = exp(-1/(srate_safe * (0.035 + release_time * 0.035)));
   band_release_slow = exp(-1/(srate_safe * (0.100 + release_time * 0.080)));
@@ -1619,6 +1646,9 @@ stream_foundation_mix = core_mode == 1 ? b : 0;
 stream_hpf_mix = core_mode == 1 ? core_stage(a,0.50,0.80) : 0;
 final_style_blend = core_mode == 1 ? f : 0;
 stream_hybrid_mix = core_mode == 1 ? f : core_mode == 2 ? 1 : 0;
+stream_band6_own_detector_mix = core_mode == 1 ? d : 0;
+stream_agc_lift_target_db = core_mode == 1 ? 3 * f : 0;
+final_backoff_mix = core_mode == 1 ? f : 0;
 
 input_trim_db = input_drive_db;
 lookahead_mode = 1;
@@ -2064,6 +2094,7 @@ input_section_mode == 1 ? (
 agc_section_in_l = l;
 agc_section_in_r = r;
 
+startup_activity = max(absmax2(l, r), startup_activity * startup_activity_release);
 agc_l = l * agc_drive;
 agc_r = r * agc_drive;
 
@@ -2513,7 +2544,10 @@ adaptive_bass_foundation_guard_active ? (
     adapt_bass_feedback_burden = abm_feedback_post_excess
                                + abm_feedback_burden_coeff
                                * (adapt_bass_feedback_burden - abm_feedback_post_excess);
-    abm_feedback_activity_room = 1 - smoothstep01((adapt_bass_feedback_burden - 0.30) / 0.45);
+    // If the full Final chain stays loaded, withdraw only this existing
+    // positive feedback assist. This is not an extra bass EQ cut.
+    abm_feedback_activity_room = (1 - smoothstep01((adapt_bass_feedback_burden - 0.30) / 0.45))
+                               * (1 - smoothstep01((final_foundation_burden - 0.15) / 0.65));
 
     abm_feedback_request_db = adapt_bass_feedback_max_assist_db
                             * abm_feedback_eligible
@@ -2530,7 +2564,8 @@ adaptive_bass_foundation_guard_active ? (
                               || abm_slow_deep_ratio_db > -3.5
                               || abm_slow_useful_ratio_db > -0.20
                               || adapt_bass_feedback_burden > 0.62
-                              || adapt_bass_feedback_rumble_state > 0.50;
+                              || adapt_bass_feedback_rumble_state > 0.50
+                              || final_foundation_burden > 0.18;
     abm_feedback_coeff = abm_feedback_request_db > adapt_bass_feedback_servo_db
                       ? adapt_bass_feedback_attack_tick
                       : abm_feedback_force_release
@@ -2860,7 +2895,8 @@ comp_g6 = 1 - xt2_mix * (1 - comp_g6_raw);
 comp_low_shared_gain = sqrt(max(comp_g1 * comp_g2, 0.000001));
 comp_g1 = comp_g1 * (1 - low_coherence) + comp_low_shared_gain * low_coherence;
 comp_g2 = comp_g2 * (1 - low_coherence) + comp_low_shared_gain * low_coherence;
-comp_g6 = comp_g5;
+comp_g6_controlled = min(comp_g5, comp_g6);
+comp_g6 = comp_g5 + stream_band6_own_detector_mix * (comp_g6_controlled - comp_g5);
 
 comp_b1_l = mb_src1_l; comp_b1_r = mb_src1_r;
 comp_b2_l = mb_src2_l; comp_b2_r = mb_src2_r;
@@ -3815,6 +3851,31 @@ delivery_target_gain<delivery_gain ? delivery_gain=delivery_target_gain : delive
 delivery_gain>0.999999999 ? delivery_gain=1;
 final_section_proc_l=delivery_buf_l[delivery_read]*delivery_gain;
 final_section_proc_r=delivery_buf_r[delivery_read]*delivery_gain;
+
+// Very slow control-rate handoff between the AGC and Final. It reacts to
+// sustained cumulative load, not individual cymbal or drum transients.
+final_load_counter += 1;
+final_load_counter >= 64 ? (
+  final_load_counter = 0;
+  final_hybrid_gain = 1 - stream_hybrid_mix * (1 - hybrid_gain);
+  final_load_gain = clamp(final_threshold_guard_gain * dynamic_clip_gain * pre_tgain * final_hybrid_gain * delivery_gain, 0.000001, 1);
+  // Loudness only learns from real program above the existing gate, so gaps,
+  // rumble, and noise cannot walk Adapt from -17 toward -14 LUFS.
+  agc_lift_target_db = gate_state < 0.50 && startup_activity >= gate_lin
+                     ? stream_agc_lift_target_db
+                     : agc_lift_state_db;
+  agc_lift_coeff = agc_lift_target_db > agc_lift_state_db ? agc_lift_attack_tick : agc_lift_release_tick;
+  agc_lift_state_db = agc_lift_target_db + agc_lift_coeff * (agc_lift_state_db - agc_lift_target_db);
+  final_load_db = max(0, -lin2db(final_load_gain));
+  final_backoff_target_db = clamp((final_load_db - 0.60) * 0.80, 0, 2) * final_backoff_mix;
+  final_backoff_coeff = final_backoff_target_db > final_backoff_db ? final_backoff_attack_tick : final_backoff_release_tick;
+  final_backoff_db = final_backoff_target_db + final_backoff_coeff * (final_backoff_db - final_backoff_target_db);
+  final_foundation_burden = clamp(final_backoff_db / 0.60, 0, 1);
+  // Most of the relief comes from opening Final; AGC yields only enough to
+  // avoid a slow tug-of-war, which keeps Adapt 100 intentionally loud.
+  final_threshold_drive_target = db2lin(-min(0, final_threshold_db + 0.90 * final_backoff_db));
+  agc_target = db2lin(-17 + agc_lift_state_db - 0.35 * final_backoff_db);
+);
 delivery_required[delivery_read]=1;
 delivery_wrpos+=1; delivery_wrpos>=delivery_buf_len ? delivery_wrpos=0;
 

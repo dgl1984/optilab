@@ -40,24 +40,25 @@ important than an aggressive broadcast sound.
 Start gently. If the result becomes too flat, dense, or pushed, lower Input
 before changing everything else.
 
-## What is new in v1.3.2
+## What is new in v1.4.0
 
-Version 1.3.2 fixes a regression in **Stream polish** stereo widening, improves
-final peak protection, and removes unnecessary CLAP delay from lower-latency
-modes without adding new controls.
+Version 1.4.0 makes the top of **Stream polish Auto-Adapt** more effective on
+sustained program material without adding controls or changing the final
+delivery target.
 
-The affected widener could raise the Side channel too indiscriminately when more
-width was requested. The restored content-aware guards now restrain already-wide
-material while still allowing narrower material to open naturally as Auto-Adapt
-rises.
+At higher settings, the upper band progressively gains independent detection,
+and qualified real program can slowly move the AGC target from -17 dB toward
+-14 dB. If sustained Final-limiter work becomes excessive, Core coordinates the
+stages instead of letting them fight: it modestly yields the AGC lift, eases the
+effective Final threshold, and withdraws the existing positive bass assist.
 
-Core also now uses reconstruction-aware final delivery limiting to catch
-intersample peaks that can become actual overs during common sample-rate
-conversion. The final output target remains **-0.1 dBFS**.
+Silence, rumble, and sub-gate noise do not train the slow loudness lift. The
+response is introduced continuously across the Auto-Adapt range rather than at
+one abrupt slider point. The final output target remains **-0.1 dBFS**.
 
-JSFX and CLAP now keep latency fixed within the selected mode. Podcast Leveler
-and Stream polish therefore no longer inherit Smooth Limiter's much longer
-mastering delay in CLAP.
+The Winamp-compatible Settings dialog also opens independently to reduce
+StationPlaylist/NVDA focus conflicts, and its optional meters avoid redundant
+accessible label updates.
 
 ## Output ceiling and sample rates
 
@@ -84,7 +85,7 @@ what you have — no extraction needed:
 - `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
 - `optilab_core.jsfx` — drop-in replacement for REAPER users.
 
-**Complete Package:** Download `OptiLab-Core-1.3.2.zip` to get all three plug-in
+**Complete Package:** Download `OptiLab-Core-1.4.0.zip` to get all three plug-in
 formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`),
 documentation, and SHA-256 checksums in a single archive.
 

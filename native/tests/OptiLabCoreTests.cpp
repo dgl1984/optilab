@@ -125,6 +125,120 @@ bool testStreamAdaptKeepsLoudnessHeadroom() {
                   "stream adapt must not trade loudness for extra crest against the ceiling");
 }
 
+struct HighBandResult {
+    double meanDensityGain = 1.0;
+    double maximumDensityStep = 0.0;
+};
+
+HighBandResult processStreamHighBand(double adaptPct) {
+    constexpr double sampleRate = 48000.0;
+    constexpr std::size_t frames = static_cast<std::size_t>(sampleRate * 6.0);
+    constexpr std::size_t skip = static_cast<std::size_t>(sampleRate * 3.0);
+    OptiLabCore core;
+    auto parameters = OptiLabCore::defaultParameters(OptiLabCore::Mode::StreamPolish);
+    parameters.autoAdaptPct = adaptPct;
+    core.prepare(sampleRate);
+    core.setParameters(parameters);
+    core.setActivityTracking(true);
+
+    double densitySum = 0.0;
+    double previousDensity = 1.0;
+    double maximumStep = 0.0;
+    std::size_t measured = 0;
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const double t = static_cast<double>(frame) / sampleRate;
+        const float sample = static_cast<float>(
+            0.75 * std::sin(2.0 * 3.14159265358979323846 * 12000.0 * t));
+        core.processSample(sample, sample);
+        const double density = core.activity().band6ControlGain;
+        if (frame == skip) previousDensity = density;
+        if (frame >= skip) {
+            densitySum += density;
+            maximumStep = std::max(maximumStep, std::abs(density - previousDensity));
+            previousDensity = density;
+            ++measured;
+        }
+    }
+    return {densitySum / static_cast<double>(measured), maximumStep};
+}
+
+bool testStreamBand6ControlIsStagedAndSmooth() {
+    const auto beforeProducerFork = processStreamHighBand(50.0);
+    const auto producerBroadcast = processStreamHighBand(100.0);
+    return expect(beforeProducerFork.meanDensityGain > 0.98,
+                  "Band 6 structure must remain inactive through Adapt 50") &&
+           expect(producerBroadcast.meanDensityGain < 0.55,
+                  "high Adapt must retain Band 6's own sustained-high control") &&
+           expect(producerBroadcast.maximumDensityStep < 0.002,
+                  "Band 6 control must not chatter on sustained high-frequency material");
+}
+
+bool testStreamFinalLoadCoordinatesAdaptActuators() {
+    constexpr double sampleRate = 48000.0;
+    constexpr std::size_t frames = static_cast<std::size_t>(sampleRate * 15.0);
+    OptiLabCore core;
+    auto parameters = OptiLabCore::defaultParameters(OptiLabCore::Mode::StreamPolish);
+    parameters.autoAdaptPct = 100.0;
+    parameters.inputDriveDb = 18.0;
+    core.prepare(sampleRate);
+    core.setParameters(parameters);
+    core.setActivityTracking(true);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const double t = static_cast<double>(frame) / sampleRate;
+        const float sample = static_cast<float>(
+            0.75 * std::sin(2.0 * 3.14159265358979323846 * 12000.0 * t));
+        core.processSample(sample, sample);
+    }
+    const auto loaded = core.activity();
+
+    OptiLabCore inactiveCore;
+    parameters.autoAdaptPct = 50.0;
+    inactiveCore.prepare(sampleRate);
+    inactiveCore.setParameters(parameters);
+    inactiveCore.setActivityTracking(true);
+    for (std::size_t frame = 0; frame < static_cast<std::size_t>(sampleRate * 3.0); ++frame) {
+        const double t = static_cast<double>(frame) / sampleRate;
+        const float sample = static_cast<float>(
+            0.75 * std::sin(2.0 * 3.14159265358979323846 * 12000.0 * t));
+        inactiveCore.processSample(sample, sample);
+    }
+    const auto inactive = inactiveCore.activity();
+
+    return expect(loaded.finalBackoffDb > 0.40,
+                  "sustained Final load must create coordinated Adapt relief") &&
+           expect(loaded.adaptAgcTargetDb < -14.20 && loaded.adaptAgcTargetDb > -15.0,
+                  "loaded AGC target must yield modestly without giving up loudness") &&
+           expect(loaded.effectiveFinalThresholdDb > -1.0 &&
+                      loaded.effectiveFinalThresholdDb <= 0.0,
+                  "sustained Final load must open the threshold toward unity") &&
+           expect(std::abs(inactive.adaptAgcTargetDb + 17.0) < 0.000001 &&
+                      inactive.finalBackoffDb < 0.000001,
+                  "Final feedback must remain inactive through Adapt 50");
+}
+
+bool testStreamAdaptLiftIgnoresSubGateNoise() {
+    constexpr double sampleRate = 48000.0;
+    constexpr std::size_t frames = static_cast<std::size_t>(sampleRate * 12.0);
+    OptiLabCore core;
+    auto parameters = OptiLabCore::defaultParameters(OptiLabCore::Mode::StreamPolish);
+    parameters.autoAdaptPct = 100.0;
+    core.prepare(sampleRate);
+    core.setParameters(parameters);
+    core.setActivityTracking(true);
+
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const double t = static_cast<double>(frame) / sampleRate;
+        const float subGate = static_cast<float>(0.001 * std::sin(
+            2.0 * 3.14159265358979323846 * 997.0 * t));
+        core.processSample(subGate, -subGate);
+    }
+    const auto noiseOnly = core.activity();
+    return expect(std::abs(noiseOnly.adaptAgcTargetDb + 17.0) < 0.000001,
+                  "sub-gate noise must not advance the Adapt loudness lift") &&
+           expect(noiseOnly.finalBackoffDb < 0.000001,
+                  "sub-gate noise must not create Final-load feedback");
+}
+
 bool testDeliveryCeilingAcrossSampleRates() {
     constexpr std::array<double, 4> sampleRates{44100.0, 48000.0, 88200.0, 96000.0};
     const float ceiling = std::nextafter(
@@ -188,6 +302,9 @@ bool testInvalidSampleRateFallsBackTo48k() {
 int main() {
     const bool passed = testModeDefaults() && testPlanarMatchesInterleaved() &&
                         testStreamAdaptKeepsLoudnessHeadroom() &&
+                        testStreamBand6ControlIsStagedAndSmooth() &&
+                        testStreamFinalLoadCoordinatesAdaptActuators() &&
+                        testStreamAdaptLiftIgnoresSubGateNoise() &&
                         testDeliveryCeilingAcrossSampleRates() &&
                         testInvalidSampleRateFallsBackTo48k();
     if (passed) {

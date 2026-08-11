@@ -4,7 +4,7 @@ if (POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
 
-project(optilab_core VERSION 1.3.2 LANGUAGES CXX)
+project(optilab_core VERSION 1.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -190,7 +190,7 @@ if (BUILD_TESTING)
         )
         target_compile_definitions(optilab-winamp-smoke-tests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
         target_compile_options(optilab-winamp-smoke-tests PRIVATE /W4 /permissive-)
-        target_link_libraries(optilab-winamp-smoke-tests PRIVATE version)
+        target_link_libraries(optilab-winamp-smoke-tests PRIVATE user32 version)
         add_test(
             NAME optilab-winamp-plugin-smoke
             COMMAND optilab-winamp-smoke-tests $<TARGET_FILE:optilab-winamp-dsp>

@@ -23,7 +23,13 @@ public:
     struct Activity {
         double agcGain = 1.0;
         double densityGain = 1.0;
+        double band6Gain = 1.0;
+        double band6ControlGain = 1.0;
         double finalGain = 1.0;
+        double foundationFeedbackDb = 0.0;
+        double effectiveFinalThresholdDb = 0.0;
+        double adaptAgcTargetDb = -17.0;
+        double finalBackoffDb = 0.0;
     };
 
     static Parameters defaultParameters(Mode mode) noexcept;
@@ -311,6 +317,7 @@ private:
     double agcMix = 0.0, agcDownMix = 0.0, xt2Mix = 0.0, adaptiveTopCoupling = 0.0, bassCoupling = 0.0;
     double bassScRelief = 0.0, lowCoherence = 0.0, lowReleaseStab = 0.0, transitionFill = 0.0, lowBassFloor = 0.0;
     double adaptiveBassCoupling = 0.0, foundationMix = 0.0, hybridMix = 0.0, streamHpfMix = 0.0, finalStyleBlend = 0.0, bassClip = 0.0, bassClipDensity = 0.0, prelimitMix = 1.0, clipRestraint = 1.0;
+    double band6OwnDetectorMix = 0.0, streamAgcLiftDb = 0.0, finalBackoffMix = 0.0;
     bool peakOnlyFinalLimiter = false; double prelimitThresh = 1.0, fcsThreshSetting = 1.0;
 
     double agcEnvAttack=0,agcGainAttack=0,agcRelease=0,agcReleaseSlow=0,bandAttack=0,upperBandAttack=0,upperMidBandAttack=0;
@@ -322,7 +329,9 @@ private:
     double mbEventAttack=0,mbEventMinimumRelease=0,mbEventMaximumRelease=0;
     double shapeRecoveryAttackBlock=0,shapeRecoveryReleaseBlock=0,shapeServoLevelBlock=0,shapeServoGainBlock=0;
     double hpf30A=0,agcSplitA=0,x1A=0,x2A=0,x3A=0,x4A=0,x5A=0,distCancelA=0; std::array<double,12> apC{};
-    double agcTarget=0,agcMaxGain=0,agcMinGain=0,gateLin=0,b1Thresh=0,b2Thresh=0,b3Thresh=0,b4Thresh=0,b5Thresh=0,b6Thresh=0;
+    double agcTarget=0,agcTargetBaseDb=-17,agcLiftStateDb=0,agcLiftAttackBlock=0,agcLiftReleaseBlock=0,agcMaxGain=0,agcMinGain=0,gateLin=0,b1Thresh=0,b2Thresh=0,b3Thresh=0,b4Thresh=0,b5Thresh=0,b6Thresh=0;
+    double finalBackoffDb=0,finalFoundationBurden=0,finalBackoffAttackBlock=0,finalBackoffReleaseBlock=0;
+    int finalLoadCounter=0;
     double constDb2LinMinus62=0,constDb2LinMinus36=0,clipRef=0,mbWorkRef=0,b1DetScGain=1,b2DetScGain=1;
     double adaptBassSplitA=0,adaptBassDetAttack=0,adaptBassDetRelease=0,adaptBassGainUp=0,adaptBassGainDown=0;
     double adaptBassTargetLow=0.33,adaptBassTargetHigh=0.52,adaptBassMaxBoostDb=0,adaptBassMaxCutDb=0;
@@ -338,7 +347,7 @@ private:
     std::array<double,3> shapeCompRatioBlock{1.0,1.0,1.0},shapeLimiterRatioBlock{1.0,1.0,1.0};
     std::array<double,6> shapeLevel{},shapeServoDb{},shapePowerAccum{};
     std::array<double,6> shapeServoGain{1.0,1.0,1.0,1.0,1.0,1.0};
-    double adaptBassGain=1,adaptTopPresenceGain=1,adaptTopAirGain=1,currentAgcLowEffGain=1,currentAgcHighEffGain=1,currentDensityGain=1,currentFinalGain=1;
+    double adaptBassGain=1,adaptTopPresenceGain=1,adaptTopAirGain=1,currentAgcLowEffGain=1,currentAgcHighEffGain=1,currentDensityGain=1,currentBand6Gain=1,currentBand6ControlGain=1,currentFinalGain=1;
     bool activityTracking=false; int masterStartupArmed=1,masterStartupAge=0,masterStartupPrimeWindow=0; double masterStartupActiveThresh=0,masterCatchGain=1;
 
     OnePole hp30L,hp30R; std::array<Allpass1,12> apL,apR; OnePole agcLpL,agcLpR; PeakEnv agcLowEnv,agcHighEnv;
