@@ -333,6 +333,7 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         settings->inputTenths = 35;
         settings->adaptPercent = 0;
         settings->visualMeters = false;
+        targetVisualMeters.store(0, std::memory_order_relaxed);
         SendDlgItemMessageW(dialog, IDC_MODE, CB_SETCURSEL, 0, 0);
         setInputText(dialog, settings->inputTenths);
         SetDlgItemInt(dialog, IDC_AUTO_ADAPT, 0, FALSE);
@@ -344,6 +345,7 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
     }
     if (control == IDC_VISUAL_METERS && HIWORD(wParam) == BN_CLICKED) {
         settings->visualMeters = IsDlgButtonChecked(dialog, IDC_VISUAL_METERS) == BST_CHECKED;
+        targetVisualMeters.store(settings->visualMeters ? 1 : 0, std::memory_order_relaxed);
         if (settings->visualMeters) {
             SetTimer(dialog, meterTimerId, meterTimerMs, nullptr);
         } else {
@@ -376,11 +378,12 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
 
 void configure(WinampDspModule* module) {
     ensureSettingsLoaded();
+    const int originalVisualMeters = targetVisualMeters.load(std::memory_order_relaxed);
     DialogSettings settings{
         targetMode.load(std::memory_order_relaxed),
         targetInputTenths.load(std::memory_order_relaxed),
         targetAdaptPercent.load(std::memory_order_relaxed),
-        targetVisualMeters.load(std::memory_order_relaxed) != 0,
+        originalVisualMeters != 0,
     };
     // A number of Winamp-compatible hosts provide a transient Preferences page
     // as hwndParent rather than a stable top-level host window. Owning a modal
@@ -388,13 +391,17 @@ void configure(WinampDspModule* module) {
     // reader focus handling. Keep Core's native settings dialog independent,
     // as established Winamp DSP configuration windows normally appear.
     (void)module;
-    if (DialogBoxParamW(instanceHandle, MAKEINTRESOURCEW(IDD_OPTILAB_CONFIG), nullptr,
-                        configDialogProc, reinterpret_cast<LPARAM>(&settings)) == IDOK) {
+    const INT_PTR result = DialogBoxParamW(
+        instanceHandle, MAKEINTRESOURCEW(IDD_OPTILAB_CONFIG), nullptr,
+        configDialogProc, reinterpret_cast<LPARAM>(&settings));
+    if (result == IDOK) {
         targetMode.store(settings.mode, std::memory_order_relaxed);
         targetInputTenths.store(settings.inputTenths, std::memory_order_relaxed);
         targetAdaptPercent.store(settings.adaptPercent, std::memory_order_relaxed);
         targetVisualMeters.store(settings.visualMeters ? 1 : 0, std::memory_order_relaxed);
         saveSettings(settings);
+    } else {
+        targetVisualMeters.store(originalVisualMeters, std::memory_order_relaxed);
     }
 }
 

@@ -32,13 +32,16 @@ back when the final stage is working too hard.
   rewrites accessible meter labels.
 - With meters enabled, unchanged labels and progress positions are left alone,
   reducing redundant accessibility events.
+- Enabling visual meters now starts collecting live audio data immediately while
+  Settings remains open; closing and reopening the window is no longer needed.
 
 ### Validation
 
 - Added native tests for smooth band-six control, coordinated Final-load
   feedback, sub-gate noise rejection, and retained loudness headroom.
 - Expanded the Windows Winamp smoke test to verify independent dialog ownership
-  and quiet meter-label behavior.
+  and quiet meter-label behavior, plus live collection before Settings closes.
+- The versioned SHA-256 checksum file is now published alongside the release ZIP.
 
 ## OptiLab Core v1.3.2
 
@@ -123,18 +126,26 @@ low-end balance, stability, and output consistency.
 
 ## OptiLab Core v1.3.0
 
-Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially refining how **Auto-Adapt** behaves, especially in **Stream polish**. No new user controls are required.
+Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially
+refining how **Auto-Adapt** behaves, especially in **Stream polish**. No new
+user controls are required.
 
 ### Stream polish and Auto-Adapt
 
 - Low Auto-Adapt settings keep Stream polish relatively open and familiar.
-- As Auto-Adapt rises, Stream polish progressively adds more width, bass control, density, Shape, and peak protection instead of simply pushing the whole processor harder.
-- The Shape progression now arrives earlier and more naturally alongside the stronger low-frequency cleanup at higher Auto-Adapt settings, helping preserve useful bass weight and punch through the transition.
-- Higher Auto-Adapt settings provide firmer broadcast-style control while keeping the output ceiling at **-0.1 dBFS**.
+- As Auto-Adapt rises, Stream polish progressively adds more width, bass
+  control, density, Shape, and peak protection instead of simply pushing the
+  whole processor harder.
+- The Shape progression now arrives earlier and more naturally alongside the
+  stronger low-frequency cleanup at higher Auto-Adapt settings, helping
+  preserve useful bass weight and punch through the transition.
+- Higher Auto-Adapt settings provide firmer broadcast-style control while
+  keeping the output ceiling at **-0.1 dBFS**.
 
 ### Smooth Limiter
 
-- Improved peak handling while retaining Smooth Limiter's focused mastering-style role and the same simple controls.
+- Improved peak handling while retaining Smooth Limiter's focused
+  mastering-style role and the same simple controls.
 
 ### Compatibility and workflow
 
@@ -144,10 +155,17 @@ Version 1.3.0 keeps OptiLab Core's three-control workflow while substantially re
 
 ### Licensing
 
-- OptiLab Core v1.3.0 and later are source-available under the Apache License 2.0 with the Commons Clause License Condition v1.0.
-- Commercial use of OptiLab Core **as an audio-processing tool** is explicitly permitted, including paid production, mastering, broadcasting, streaming, podcasting, and other monetized audio work. No royalty is owed on audio processed with OptiLab Core.
-- Selling OptiLab Core itself, or a product or service whose value derives entirely or substantially from OptiLab Core's software functionality, requires separate permission from Lanes Audio.
-- Earlier releases remain under the license terms under which they were originally published.
+- OptiLab Core v1.3.0 and later are source-available under the Apache License 2.0
+  with the Commons Clause License Condition v1.0.
+- Commercial use of OptiLab Core **as an audio-processing tool** is explicitly
+  permitted, including paid production, mastering, broadcasting, streaming,
+  podcasting, and other monetized audio work. No royalty is owed on audio
+  processed with OptiLab Core.
+- Selling OptiLab Core itself, or a product or service whose value derives
+  entirely or substantially from OptiLab Core's software functionality,
+  requires separate permission from Lanes Audio.
+- Earlier releases remain under the license terms under which they were
+  originally published.
 
 ## OptiLab Core v1.2.0
 
@@ -220,7 +238,7 @@ editor or changing its window hierarchy.
 This release keeps the Winamp DSP sound and host calibration from v1.1.1, while
 making the settings-window meters opt-in for better screen-reader behavior.
 
-### Winamp-compatible DSP
+### Accessible Winamp metering
 
 - Added a **Show visual meters** checkbox to the settings window.
 - Left visual meters off by default so screen readers do not announce changing
@@ -269,10 +287,10 @@ near the output ceiling when the material supports it.
 
 - Updated Stream polish so difficult music and mixed program material get safer
   internal peak handling without forcing the result to become quiet.
-- Added Producer-style hidden peak protection inside Core while keeping the
+- Added hidden final peak protection inside Core while keeping the
   visible interface at three controls.
 - Reduced the hidden 6-band recombination clipping behavior so it cannot be
-  pushed into the harsh high settings used by some Producer presets.
+  pushed into harsh high settings used by more aggressive configurations.
 - Retuned Stream polish to use recovered headroom and finish closer to the
   selected output ceiling instead of leaving unnecessary level unused.
 - Kept the output sample ceiling at the end of the chain. As before, later
@@ -312,43 +330,70 @@ near the output ceiling when the material supports it.
 
 ## OptiLab Core v1.0.3
 
-This is an Auto-Adapt and speech-transition update for OptiLab Core. The plugin keeps the same simple three-control design: **Mode**, **Input**, and **Auto-Adapt**. No new controls were added.
+This is an Auto-Adapt and speech-transition update for OptiLab Core. The plugin
+keeps the same simple three-control design: **Mode**, **Input**, and
+**Auto-Adapt**. No new controls were added.
 
 ### Refined Auto-Adapt behavior
 
 Auto-Adapt has been refined in **Podcast Leveler** and **Stream polish**.
 
-In Podcast Leveler, higher Auto-Adapt settings now focus more on controlled leveling and protection rather than simply pushing harder into the processing chain. This reduces the chance of clip-like behavior on difficult speech while still allowing high Auto-Adapt settings to become more active when needed.
+In Podcast Leveler, higher Auto-Adapt settings now focus more on controlled
+leveling and protection rather than simply pushing harder into the processing
+chain. This reduces the chance of clip-like behavior on difficult speech while
+still allowing high Auto-Adapt settings to become more active when needed.
 
-In Stream polish, Auto-Adapt now keeps the familiar base sound while becoming smoother and more stable as it is raised. The goal is better consistency for mixed program material without making the mode feel slammed, dull, or over-smoothed.
+In Stream polish, Auto-Adapt now keeps the familiar base sound while becoming
+smoother and more stable as it is raised. The goal is better consistency for
+mixed program material without making the mode feel slammed, dull, or
+over-smoothed.
 
 ### Better handling of pauses and speech transitions
 
-A few users reported an edge case where spoken-word material with pauses between phrases could trigger a chunky, old-style automatic gain sound. The effect was similar to the level movement you might hear from a basic tape recorder or consumer voice recorder when it turns quieter material up and then grabs the next loud phrase.
+A few users reported an edge case where spoken-word material with pauses between
+phrases could trigger a chunky, old-style automatic gain sound. The effect was
+similar to the level movement you might hear from a basic tape recorder or
+consumer voice recorder when it turns quieter material up and then grabs the
+next loud phrase.
 
-Version 1.0.3 refines that behavior so speech transitions feel smoother and less abrupt, especially on uneven voice recordings, breaths, and short pauses between phrases.
+Version 1.0.3 refines that behavior so speech transitions feel smoother and less
+abrupt, especially on uneven voice recordings, breaths, and short pauses between
+phrases.
 
 ### Startup transition cleanup
 
-Older startup peak-catch behavior has been retired. This helps Core rely more naturally on its main leveling and final control stages instead of adding an extra startup reaction that could become audible on certain material.
+Older startup peak-catch behavior has been retired. This helps Core rely more
+naturally on its main leveling and final control stages instead of adding an
+extra startup reaction that could become audible on certain material.
 
 ### Screen-reader wording improvement
 
-The Stream mode is now written as **Stream polish** instead of **Stream Polish**. This avoids a confusing pronunciation issue in some screen readers and text-to-speech voices, where the capitalized word could be read as "Polish" referring to Poland rather than "polish" as in audio polish.
+The Stream mode is now written as **Stream polish** instead of **Stream Polish**.
+This avoids a confusing pronunciation issue in some screen readers and
+text-to-speech voices, where the capitalized word could be read as "Polish"
+referring to Poland rather than "polish" as in audio polish.
 
 ### Smooth Limiter unchanged
 
-Smooth Limiter remains essentially unchanged in this update. It already has a focused job, so this release concentrates on Podcast Leveler, Stream polish, and Auto-Adapt behavior.
+Smooth Limiter remains essentially unchanged in this update. It already has a
+focused job, so this release concentrates on Podcast Leveler, Stream polish, and
+Auto-Adapt behavior.
 
 ## OptiLab Core v1.0.2
 
-This was a sound and usability update for OptiLab Core. The plugin kept the same simple three-control design: **Mode**, **Input Drive**, and **Auto-Adapt**. No extra controls were added.
+This was a sound and usability update for OptiLab Core. The plugin kept the same
+simple three-control design: **Mode**, **Input Drive**, and **Auto-Adapt**. No
+extra controls were added.
 
 ### More complete output ceiling behavior
 
-Podcast Leveler, Stream Polish, and Smooth Limiter were updated to use the full **-0.1 dBFS** output target instead of holding Podcast and Stream modes back around the older conservative ceiling range.
+Podcast Leveler, Stream Polish, and Smooth Limiter were updated to use the full
+**-0.1 dBFS** output target instead of holding Podcast and Stream modes back
+around the older conservative ceiling range.
 
-This gave Core more room to use its own staging and final processing. In practical terms, Podcast and Stream modes could finish closer to the available digital ceiling when the material and processing called for it.
+This gave Core more room to use its own staging and final processing. In
+practical terms, Podcast and Stream modes could finish closer to the available
+digital ceiling when the material and processing called for it.
 
 ### Same simple control layout
 
@@ -360,19 +405,27 @@ OptiLab Core remained intentionally simple:
 
 ### Input Drive persistence fix retained
 
-This release kept the v1.0.1 fix that prevents Input Drive from being reset during playback, render, stop/start, or plugin reinitialization.
+This release kept the v1.0.1 fix that prevents Input Drive from being reset
+during playback, render, stop/start, or plugin reinitialization.
 
-Switching modes still loads a sensible starting Input Drive for that mode, but once you adjust Input Drive yourself, Core should not silently overwrite it during normal playback or rendering.
+Switching modes still loads a sensible starting Input Drive for that mode, but
+once you adjust Input Drive yourself, Core should not silently overwrite it
+during normal playback or rendering.
 
 ### Small CPU hygiene
 
-This version included small internal cleanup work, including cached multiband clip scalar values and removal of unused output-gain work. These changes were intended to keep the processor lean without changing the basic three-control workflow.
+This version included small internal cleanup work, including cached multiband
+clip scalar values and removal of unused output-gain work. These changes were
+intended to keep the processor lean without changing the basic three-control
+workflow.
 
-Projects using OptiLab Core may render faster, especially if multiple instances are being used.
+Projects using OptiLab Core may render faster, especially if multiple instances
+are being used.
 
 ## OptiLab Core v1.0.1
 
-- Fixed Input Drive being reset to the mode default during playback, rendering, stop/start, or plugin reinitialization.
+- Fixed Input Drive being reset to the mode default during playback, rendering,
+  stop/start, or plugin reinitialization.
 
 ## OptiLab Core v1.0.0
 

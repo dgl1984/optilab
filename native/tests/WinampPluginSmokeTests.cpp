@@ -188,6 +188,51 @@ int wmain(int argc, wchar_t** argv) {
         FreeLibrary(library);
         return 1;
     }
+
+    constexpr int meterFrames = 2048;
+    std::vector<std::int16_t> meterSamples(meterFrames * 2);
+    for (std::size_t i = 0; i < meterSamples.size(); ++i) {
+        meterSamples[i] =
+            (i % 4 < 2) ? static_cast<std::int16_t>(12000)
+                        : static_cast<std::int16_t>(-9000);
+    }
+    if (module->init(module) != 0) {
+        std::cerr << "FAIL: plug-in initialization failed\n";
+        PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+        configThread.join();
+        DestroyWindow(suppliedParent);
+        FreeLibrary(library);
+        return 1;
+    }
+    SendDlgItemMessageW(configDialog, IDC_VISUAL_METERS, BM_CLICK, 0, 0);
+    wchar_t inputPeakText[64]{};
+    bool observedLiveMeter = false;
+    for (int attempt = 0; attempt < 20 && !observedLiveMeter; ++attempt) {
+        if (module->modifySamples(module, reinterpret_cast<short*>(meterSamples.data()),
+                                  meterFrames, 16, 2, 48000) != meterFrames) {
+            std::cerr << "FAIL: live visual-meter processing callback failed\n";
+            PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+            configThread.join();
+            module->quit(module);
+            DestroyWindow(suppliedParent);
+            FreeLibrary(library);
+            return 1;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        GetDlgItemTextW(configDialog, IDC_INPUT_PEAK, inputPeakText,
+                        static_cast<int>(std::size(inputPeakText)));
+        observedLiveMeter =
+            std::wstring(inputPeakText).find(L"dBFS") != std::wstring::npos;
+    }
+    if (!observedLiveMeter) {
+        std::cerr << "FAIL: visual meters did not collect data while Settings was open\n";
+        PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+        configThread.join();
+        module->quit(module);
+        DestroyWindow(suppliedParent);
+        FreeLibrary(library);
+        return 1;
+    }
     PostMessageW(configDialog, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
     configThread.join();
     module->hwndParent = nullptr;
@@ -199,8 +244,7 @@ int wmain(int argc, wchar_t** argv) {
         samples[i] = (i % 4 < 2) ? static_cast<std::int16_t>(12000) : static_cast<std::int16_t>(-9000);
     }
     const auto original = samples;
-    if (module->init(module) != 0 ||
-        module->modifySamples(module, reinterpret_cast<short*>(samples.data()),
+    if (module->modifySamples(module, reinterpret_cast<short*>(samples.data()),
                               frames, 16, 2, 48000) != frames) {
         std::cerr << "FAIL: plug-in processing callback failed\n";
         module->quit(module);

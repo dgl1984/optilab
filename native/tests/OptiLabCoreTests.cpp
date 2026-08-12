@@ -163,13 +163,13 @@ HighBandResult processStreamHighBand(double adaptPct) {
 }
 
 bool testStreamBand6ControlIsStagedAndSmooth() {
-    const auto beforeProducerFork = processStreamHighBand(50.0);
-    const auto producerBroadcast = processStreamHighBand(100.0);
-    return expect(beforeProducerFork.meanDensityGain > 0.98,
+    const auto beforeBroadcastControl = processStreamHighBand(50.0);
+    const auto fullBroadcastControl = processStreamHighBand(100.0);
+    return expect(beforeBroadcastControl.meanDensityGain > 0.98,
                   "Band 6 structure must remain inactive through Adapt 50") &&
-           expect(producerBroadcast.meanDensityGain < 0.55,
+           expect(fullBroadcastControl.meanDensityGain < 0.55,
                   "high Adapt must retain Band 6's own sustained-high control") &&
-           expect(producerBroadcast.maximumDensityStep < 0.002,
+           expect(fullBroadcastControl.maximumDensityStep < 0.002,
                   "Band 6 control must not chatter on sustained high-frequency material");
 }
 

@@ -89,6 +89,9 @@ what you have — no extraction needed:
 formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`),
 documentation, and SHA-256 checksums in a single archive.
 
+The release also provides `OptiLab-Core-1.4.0-SHA256.txt` separately so the ZIP
+can be verified before extraction.
+
 ## REAPER installation
 
 1. Download `optilab_core.jsfx` from the latest release.

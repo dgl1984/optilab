@@ -289,7 +289,7 @@ private:
     double finalThresholdMakeup = 1.0, smoothDriveRounderAmt = 0.0, postAgcSmoothDriveAmt = 0.0, postXt2SmoothDriveAmt = 0.0;
     double postAgcSmoothRecoveryGain = 1.0, postXt2SmoothRecoveryGain = 1.0, preFinalDriveGain = 1.0, outputGain = 1.0;
     double mbClipMix = 0.0, dcCancel = 0.0, dc3Amt = 0.0, dc4Amt = 0.0, dc5Amt = 0.0, dc6Amt = 0.0;
-    bool producerDensityActive = false;
+    bool broadcastDensityActive = false;
     double mbShape = 0.0, shapeHighAmount = 0.0, mbCompLimiter = 0.0, mbCompKeep = 1.0;
     double mbLimiterForkCalibrationGain = 1.0, mbPresencePost = 1.0, mbBrilliancePost = 1.0;
     double presenceEdgeRecoveryGain = 1.0, presenceBodyRecoveryGain = 1.0, brillianceRecoveryGain = 1.0;

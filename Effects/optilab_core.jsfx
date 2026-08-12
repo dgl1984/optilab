@@ -1173,7 +1173,7 @@ function update_derived_params() local(dpos dneg)
   mb_comp_limiter_raw = clamp(mb_comp_limiter_pct, 0, 100) * 0.01;
   mb_comp_limiter = mb_comp_limiter_raw * (0.85 + 0.15 * mb_comp_limiter_raw);
   mb_comp_keep = 1 - mb_comp_limiter;
-  producer_density_active = core_mode == 1 && (mb_comp_limiter_pct > 0.000001 || mb_shape_pct > 0.000001);
+  broadcast_density_active = core_mode == 1 && (mb_comp_limiter_pct > 0.000001 || mb_shape_pct > 0.000001);
 
   lim_depth_user = clamp(mb_limiter_depth_pct * 0.01, 0, 1);
   lim_depth_norm = 0.75 * sqrt(lim_depth_user);
@@ -2959,7 +2959,7 @@ comp_p4_l = comp_b4_l * comp_g4; comp_p4_r = comp_b4_r * comp_g4;
 comp_p5_l = comp_b5_l * comp_g5; comp_p5_r = comp_b5_r * comp_g5;
 comp_p6_l = comp_b6_l * comp_g6; comp_p6_r = comp_b6_r * comp_g6;
 
-producer_density_active ? (
+broadcast_density_active ? (
 comp_post_b1 = absmax2(comp_p1_l, comp_p1_r) + 0.0000001;
 comp_post_b2 = absmax2(comp_p2_l, comp_p2_r) + 0.0000001;
 comp_post_b3 = absmax2(comp_p3_l, comp_p3_r) + 0.0000001;

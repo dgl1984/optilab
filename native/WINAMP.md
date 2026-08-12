@@ -29,7 +29,8 @@ and helps prevent the associated NVDA focus and speech conflict.
 - **Restore Defaults:** Podcast Leveler, +3.5 dB, and 0 percent
 
 When switching modes, the Winamp DSP uses host-calibrated starting Input values.
-Stream polish starts at `+1.0 dB`, which is tailored for Winamp-compatible integer PCM hosts.
+Stream polish starts at `+1.0 dB`, which is tailored for Winamp-compatible
+integer PCM hosts.
 
 Settings are stored separately for each host application under:
 
@@ -42,6 +43,8 @@ No administrator access is needed to save settings.
 When visual meters are off, Core does not run the meter timer or repeatedly
 rewrite the accessible meter labels. When meters are on, unchanged text and
 progress positions are left alone to reduce redundant accessibility events.
+Enabling the meters starts live data collection immediately while the Settings
+window remains open.
 
 ## Installation
 
@@ -74,9 +77,14 @@ automatic balancing.
 
 ## Output ceiling and sample-rate conversion
 
-OptiLab Core now uses reconstruction-aware final delivery limiting before returning audio to the host. This protects against intersample peaks that can become actual overs during common sample-rate conversion while retaining the **-0.1 dBFS** output target.
+OptiLab Core now uses reconstruction-aware final delivery limiting before
+returning audio to the host. This protects against intersample peaks that can
+become actual overs during common sample-rate conversion while retaining the
+**-0.1 dBFS** output target.
 
-Downstream processing, unusual resamplers, and lossy codecs can still alter peaks after the DSP, so measuring the final delivered stream or file remains good practice.
+Downstream processing, unusual resamplers, and lossy codecs can still alter
+peaks after the DSP, so measuring the final delivered stream or file remains
+good practice.
 
 ## Troubleshooting
 

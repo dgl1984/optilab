@@ -133,6 +133,7 @@ jobs:
             (Resolve-Path "dist\OptiLab_Core.clap").Path
             (Resolve-Path "dist\dsp_optilab_core.dll").Path
             (Resolve-Path "dist\OptiLab-Core-$version.zip").Path
+            (Resolve-Path "dist\OptiLab-Core-$version-SHA256.txt").Path
           )
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -eq 0) {

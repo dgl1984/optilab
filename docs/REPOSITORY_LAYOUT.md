@@ -6,7 +6,7 @@ packages, installed plug-ins, and local analysis data.
 ## Source
 
 ```text
-Effects/                     REAPER JSFX distributed by ReaPack/releases
+Effects/                     REAPER JSFX distributed by GitHub Releases
 native/
   core/                      Shared framework-independent DSP
   plugins/
