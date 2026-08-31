@@ -36,8 +36,8 @@ jobs:
       - name: Build and test Win32 foobar2000 component
         run: |
           cmake --preset vs2022-foobar2000-win32 -S native
-          cmake --build --preset foobar2000-win32-release
-          ctest --preset foobar2000-win32-release
+          cmake --build native/build-foobar2000-win32 --config Release
+          ctest --test-dir native/build-foobar2000-win32 -C Release --output-on-failure
 
       - name: Verify DLL architecture, export, and runtime dependencies
         shell: pwsh
@@ -70,8 +70,8 @@ jobs:
       - name: Build and test x64 foobar2000 component
         run: |
           cmake --preset vs2022-foobar2000-x64 -S native
-          cmake --build --preset foobar2000-x64-release
-          ctest --preset foobar2000-x64-release
+          cmake --build native/build-foobar2000-x64 --config Release
+          ctest --test-dir native/build-foobar2000-x64 -C Release --output-on-failure
 
       - name: Verify CLAP architecture, export, and runtime dependencies
         shell: pwsh

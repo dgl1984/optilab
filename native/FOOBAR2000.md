@@ -29,12 +29,12 @@ can be supplied with CMake's `FOOBAR2000_SDK_ROOT` cache variable.
 
 ```powershell
 cmake --preset vs2022-foobar2000-x64 -S native
-cmake --build --preset foobar2000-x64-release
-ctest --preset foobar2000-x64-release
+cmake --build native/build-foobar2000-x64 --config Release
+ctest --test-dir native/build-foobar2000-x64 -C Release --output-on-failure
 
 cmake --preset vs2022-foobar2000-win32 -S native
-cmake --build --preset foobar2000-win32-release
-ctest --preset foobar2000-win32-release
+cmake --build native/build-foobar2000-win32 --config Release
+ctest --test-dir native/build-foobar2000-win32 -C Release --output-on-failure
 ```
 
 The resulting DLLs are:

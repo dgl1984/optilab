@@ -33,6 +33,7 @@ foreach ($component in @($x64Dll, $win32Dll)) {
 
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
 $stage = Join-Path $outputRoot "foo_optilab_core-$version-stage"
+$zipPackage = Join-Path $outputRoot "foo_optilab_core-$version.zip"
 $package = Join-Path $outputRoot "foo_optilab_core-$version.fb2k-component"
 $checksums = Join-Path $outputRoot "foo_optilab_core-$version-SHA256.txt"
 
@@ -40,7 +41,7 @@ New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 if (Test-Path -LiteralPath $stage) {
     Remove-Item -LiteralPath $stage -Recurse -Force
 }
-Remove-Item -LiteralPath $package,$checksums -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $zipPackage,$package,$checksums -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path (Join-Path $stage "x64") -Force | Out-Null
 Copy-Item -LiteralPath $win32Dll -Destination (Join-Path $stage "foo_optilab_core.dll")
 Copy-Item -LiteralPath $x64Dll -Destination (Join-Path $stage "x64\foo_optilab_core.dll")
@@ -52,7 +53,8 @@ if (-not (Test-Path -LiteralPath $sdkLicense)) {
 }
 Copy-Item -LiteralPath $sdkLicense -Destination (Join-Path $stage "foobar2000-sdk-license.txt")
 
-Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $package -CompressionLevel Optimal
+Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zipPackage -CompressionLevel Optimal
+Move-Item -LiteralPath $zipPackage -Destination $package
 $packageHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $package).Hash
 "$packageHash  $([IO.Path]::GetFileName($package))" |
     Set-Content -LiteralPath $checksums -Encoding ascii
