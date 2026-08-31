@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## OptiLab Core v1.4.0 foobar2000 component
 
-### foobar2000 component
+Published August 31, 2026 as an optional host adapter for the existing
+OptiLab Core v1.4.0 engine. The JSFX, CLAP, and Winamp-compatible release
+assets are unchanged.
 
 - Added a native foobar2000 DSP component using the unmodified shared
   `OptiLabCore` processing engine.
