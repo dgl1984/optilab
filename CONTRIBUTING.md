@@ -6,7 +6,8 @@ changes should be discussed in an issue first.
 
 ## What is in scope
 
-- Bug fixes for the JSFX, C++ engine, CLAP wrapper, Winamp adapter, or CI.
+- Bug fixes for the JSFX, C++ engine, CLAP wrapper, Winamp adapter,
+  foobar2000 adapter, or CI.
 - Improvements to accessibility, documentation, or test coverage.
 - Host compatibility fixes for Winamp, RadioBOSS, StationPlaylist Studio, or
   other Winamp DSP–compatible broadcast applications.
@@ -55,6 +56,7 @@ The packaging script produces the release ZIP and SHA-256 file:
 ```powershell
 ./scripts/package-winamp.ps1
 ./scripts/package-clap.ps1
+./scripts/package-foobar2000.ps1
 ```
 
 ## Tests

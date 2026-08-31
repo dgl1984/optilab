@@ -16,3 +16,4 @@ Desktop.ini
 /graphify-out/
 /.vs/
 /native/CMakeUserPresets.json
+/native/third_party/foobar2000-sdk/

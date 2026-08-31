@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### foobar2000 component
+
+- Added a native foobar2000 DSP component using the unmodified shared
+  `OptiLabCore` processing engine.
+- Added Win32 and x64 builds in one installable `.fb2k-component` package.
+- Added per-preset Mode, Input Drive, and Auto-Adapt settings with a native,
+  keyboard-accessible Windows dialog. Input Drive is a non-editable list with
+  0.1 dB steps; Auto-Adapt is a native percentage slider.
+- Added latency reporting, end-of-stream draining, preset serialization,
+  official-SDK bootstrapping, packaging, and dual-bitness smoke tests.
+
 ## OptiLab Core v1.4.0
 
 Version 1.4.0 strengthens the upper end of **Stream polish Auto-Adapt**. At

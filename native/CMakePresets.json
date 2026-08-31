@@ -22,6 +22,30 @@
         "OPTILAB_BUILD_CLAP": "OFF",
         "OPTILAB_BUILD_WINAMP": "ON"
       }
+    },
+    {
+      "name": "vs2022-foobar2000-x64",
+      "displayName": "Visual Studio 2022 x64 (foobar2000)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build-foobar2000-x64",
+      "cacheVariables": {
+        "OPTILAB_BUILD_CLAP": "OFF",
+        "OPTILAB_BUILD_WINAMP": "OFF",
+        "OPTILAB_BUILD_FOOBAR2000": "ON"
+      }
+    },
+    {
+      "name": "vs2022-foobar2000-win32",
+      "displayName": "Visual Studio 2022 Win32 (foobar2000)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "Win32",
+      "binaryDir": "${sourceDir}/build-foobar2000-win32",
+      "cacheVariables": {
+        "OPTILAB_BUILD_CLAP": "OFF",
+        "OPTILAB_BUILD_WINAMP": "OFF",
+        "OPTILAB_BUILD_FOOBAR2000": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -44,6 +68,16 @@
       "name": "winamp-debug",
       "configurePreset": "vs2022-win32",
       "configuration": "Debug"
+    },
+    {
+      "name": "foobar2000-x64-release",
+      "configurePreset": "vs2022-foobar2000-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "foobar2000-win32-release",
+      "configurePreset": "vs2022-foobar2000-win32",
+      "configuration": "Release"
     }
   ],
   "testPresets": [
@@ -58,6 +92,22 @@
     {
       "name": "winamp-release",
       "configurePreset": "vs2022-win32",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "foobar2000-x64-release",
+      "configurePreset": "vs2022-foobar2000-x64",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "foobar2000-win32-release",
+      "configurePreset": "vs2022-foobar2000-win32",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

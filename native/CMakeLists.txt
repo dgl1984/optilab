@@ -12,6 +12,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(OPTILAB_BUILD_CLAP "Build the 64-bit Windows CLAP plug-in" ON)
 option(OPTILAB_BUILD_WINAMP "Build the 32-bit classic Winamp DSP plug-in" ON)
+option(OPTILAB_BUILD_FOOBAR2000 "Build the foobar2000 DSP component" OFF)
+set(FOOBAR2000_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/foobar2000-sdk"
+    CACHE PATH "Path to the extracted foobar2000 SDK 2025-03-07 root")
 
 if (MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -26,6 +29,7 @@ configure_file(
 set(OPTILAB_CORE_DIR core)
 set(OPTILAB_CLAP_DIR plugins/clap)
 set(OPTILAB_WINAMP_DIR plugins/winamp)
+set(OPTILAB_FOOBAR2000_DIR plugins/foobar2000)
 set(OPTILAB_CLI_DIR tools/cli)
 
 add_library(optilab-core STATIC
@@ -74,6 +78,70 @@ if (OPTILAB_BUILD_CLAP AND WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
         OUTPUT_NAME "OptiLab_Core"
         PREFIX ""
         SUFFIX ".clap"
+    )
+endif()
+
+if (OPTILAB_BUILD_FOOBAR2000)
+    if (NOT MSVC OR NOT WIN32)
+        message(FATAL_ERROR "The foobar2000 component requires MSVC on Windows.")
+    endif()
+    if (NOT EXISTS "${FOOBAR2000_SDK_ROOT}/sdk-license.txt" OR
+        NOT EXISTS "${FOOBAR2000_SDK_ROOT}/foobar2000/SDK/foobar2000.h")
+        message(FATAL_ERROR
+            "foobar2000 SDK 2025-03-07 was not found at ${FOOBAR2000_SDK_ROOT}. "
+            "Run scripts/setup-foobar2000-sdk.ps1 first or set FOOBAR2000_SDK_ROOT.")
+    endif()
+
+    enable_language(RC)
+    file(GLOB FOOBAR2000_PFC_SOURCES CONFIGURE_DEPENDS
+        "${FOOBAR2000_SDK_ROOT}/pfc/*.cpp")
+    list(FILTER FOOBAR2000_PFC_SOURCES EXCLUDE REGEX
+        "/(nix-objects|pfc-fb2k-hooks|synchro_nix)\\.cpp$")
+    file(GLOB FOOBAR2000_API_SOURCES CONFIGURE_DEPENDS
+        "${FOOBAR2000_SDK_ROOT}/foobar2000/SDK/*.cpp")
+
+    add_library(optilab-foobar2000 MODULE
+        ${OPTILAB_FOOBAR2000_DIR}/OptiLabFoobar2000.cpp
+        ${OPTILAB_FOOBAR2000_DIR}/OptiLabFoobar2000.rc
+        ${OPTILAB_CORE_DIR}/OptiLabCore.cpp
+        ${FOOBAR2000_PFC_SOURCES}
+        ${FOOBAR2000_API_SOURCES}
+        "${FOOBAR2000_SDK_ROOT}/foobar2000/foobar2000_component_client/component_client.cpp"
+    )
+    target_include_directories(optilab-foobar2000 PRIVATE
+        ${OPTILAB_FOOBAR2000_DIR}
+        ${OPTILAB_CORE_DIR}
+        "${FOOBAR2000_SDK_ROOT}"
+        "${FOOBAR2000_SDK_ROOT}/foobar2000"
+        "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    )
+    target_compile_definitions(optilab-foobar2000 PRIVATE
+        UNICODE
+        _UNICODE
+        NOMINMAX
+    )
+    target_compile_options(optilab-foobar2000 PRIVATE /W3 /permissive-)
+    set_property(TARGET optilab-foobar2000 PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+
+    if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(FOOBAR2000_SHARED_LIBRARY
+            "${FOOBAR2000_SDK_ROOT}/foobar2000/shared/shared-x64.lib")
+    else()
+        set(FOOBAR2000_SHARED_LIBRARY
+            "${FOOBAR2000_SDK_ROOT}/foobar2000/shared/shared-Win32.lib")
+    endif()
+    target_link_libraries(optilab-foobar2000 PRIVATE
+        "${FOOBAR2000_SHARED_LIBRARY}"
+        comctl32
+        shlwapi
+        user32
+        version
+        winmm
+    )
+    set_target_properties(optilab-foobar2000 PROPERTIES
+        OUTPUT_NAME "foo_optilab_core"
+        PREFIX ""
     )
 endif()
 
@@ -194,6 +262,25 @@ if (BUILD_TESTING)
         add_test(
             NAME optilab-winamp-plugin-smoke
             COMMAND optilab-winamp-smoke-tests $<TARGET_FILE:optilab-winamp-dsp>
+        )
+    endif()
+
+    if (TARGET optilab-foobar2000)
+        add_executable(optilab-foobar2000-smoke-tests
+            tests/Foobar2000PluginSmokeTests.cpp
+        )
+        target_include_directories(optilab-foobar2000-smoke-tests PRIVATE
+            ${OPTILAB_FOOBAR2000_DIR}
+            ${OPTILAB_CORE_DIR})
+        target_compile_definitions(optilab-foobar2000-smoke-tests PRIVATE
+            UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_compile_options(optilab-foobar2000-smoke-tests PRIVATE /W4 /permissive-)
+        target_link_libraries(optilab-foobar2000-smoke-tests PRIVATE
+            optilab-core
+            version)
+        add_test(
+            NAME optilab-foobar2000-plugin-smoke
+            COMMAND optilab-foobar2000-smoke-tests $<TARGET_FILE:optilab-foobar2000>
         )
     endif()
 endif()
