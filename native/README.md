@@ -8,6 +8,7 @@ native plug-in wrappers, command-line validation tool, and native tests.
 - `core/`: reusable real-time DSP engine and public C++ header
 - `plugins/clap/`: 64-bit Windows CLAP wrapper and responsive editor
 - `plugins/winamp/`: classic Winamp DSP ABI, PCM conversion, and settings UI
+- `plugins/foobar2000/`: Win32 and x64 foobar2000 DSP component adapter
 - `tools/cli/`: WAV command-line validation tool
 - `tests/`: Core API, adapter, plug-in loading, and accessibility smoke tests
 - `third_party/`: pinned external SDK headers and their licenses
@@ -50,6 +51,8 @@ ctest --test-dir native/build -C Release --output-on-failure
 See [`WINAMP.md`](WINAMP.md) for plug-in installation and compatibility details.
 See [`CLAP.md`](CLAP.md) for CLAP build, installation, accessibility, and
 testing details.
+See [`FOOBAR2000.md`](FOOBAR2000.md) for the dual-bitness foobar2000 component
+build, packaging, installation, and adapter behavior.
 See [`../docs/CLAP_ACCESSIBILITY.md`](../docs/CLAP_ACCESSIBILITY.md) before
 changing the CLAP parameter interface, native controls, or host window
 parenting.

@@ -3,7 +3,8 @@
 OptiLab Core is a free, accessible broadcast and mastering audio processor from
 LanesAudio. It combines leveling, density, tone control, saturation, limiting,
 and general program polish. It is available as a JSFX for REAPER, a 64-bit
-Windows CLAP plug-in, and a classic Winamp-compatible DSP plug-in for Windows.
+Windows CLAP plug-in, a classic Winamp-compatible DSP plug-in, and a
+dual-bitness foobar2000 component for Windows.
 
 The processor has three main controls: **Mode**, **Input**, and **Auto-Adapt**.
 That simplicity is intentional. OptiLab Core is designed to reach a useful,
@@ -83,6 +84,8 @@ what you have — no extraction needed:
 
 - `OptiLab_Core.clap` — drop-in replacement for the 64-bit Windows CLAP plug-in.
 - `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
+- `foo_optilab_core-1.4.0.fb2k-component` — installable Win32 and x64
+  foobar2000 component.
 - `optilab_core.jsfx` — drop-in replacement for REAPER users.
 
 **Complete Package:** Download `OptiLab-Core-1.4.0.zip` to get all three plug-in
@@ -111,6 +114,19 @@ can be verified before extraction.
 
 See [`native/CLAP.md`](native/CLAP.md) for controls, accessibility, build
 instructions, and host behavior.
+
+## foobar2000 installation
+
+1. Download `foo_optilab_core-1.4.0.fb2k-component`.
+2. Open the downloaded package with foobar2000 and approve the component
+   installation.
+3. Restart foobar2000 when prompted.
+4. Open **Preferences > Playback > DSP Manager**, add **OptiLab Core** to the
+   active DSP chain, and configure it.
+
+The package contains both Win32 and x64 DLLs in foobar2000's standard
+dual-architecture layout. See [`native/FOOBAR2000.md`](native/FOOBAR2000.md)
+for build, controls, accessibility, and packaging details.
 
 ## StationPlaylist and Winamp-compatible DSP installation and use
 
