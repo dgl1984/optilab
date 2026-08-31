@@ -6,6 +6,10 @@ Published August 31, 2026 as an optional host adapter for the existing
 OptiLab Core v1.4.0 engine. The JSFX, CLAP, and Winamp-compatible release
 assets are unchanged.
 
+The foobar2000 component was contributed by
+[Nick Giannak III (`@Nick6489`)](https://github.com/Nick6489) in
+[pull request #1](https://github.com/dgl1984/optilab/pull/1).
+
 - Added a native foobar2000 DSP component using the unmodified shared
   `OptiLabCore` processing engine.
 - Added Win32 and x64 builds in one installable `.fb2k-component` package.
