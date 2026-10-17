@@ -1,0 +1,48 @@
+name: Sync release README
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sync-release-readme.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch existing release ZIP documentation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.0
+          asset=OptiLab-Core-1.4.0.zip
+          checksum=OptiLab-Core-1.4.0-SHA256.txt
+          gh release download "$tag" -p "$asset" -p "$checksum"
+          python - <<'PY'
+          import zipfile, os
+          from pathlib import Path
+          asset = Path('OptiLab-Core-1.4.0.zip')
+          readme = Path('README.md').read_bytes()
+          tmp = asset.with_suffix('.tmp.zip')
+          with zipfile.ZipFile(asset, 'r') as zin:
+              names = zin.namelist()
+              candidates = [n for n in names if n.lower() == 'readme.md' or (n.lower().endswith('/readme.md') and n.count('/') == 1)]
+              if len(candidates) != 1:
+                  raise SystemExit(f'Expected exactly one package README.md, found: {candidates}')
+              target = candidates[0]
+              with zipfile.ZipFile(tmp, 'w') as zout:
+                  for info in zin.infolist():
+                      data = readme if info.filename == target else zin.read(info.filename)
+                      zout.writestr(info, data)
+          os.replace(tmp, asset)
+          print('Updated', target)
+          PY
+          newhash=$(sha256sum "$asset" | awk '{print $1}')
+          printf '%s  %s\n' "$newhash" "$asset" > "$checksum"
+          gh release upload "$tag" "$asset" "$checksum" --clobber
+          echo "Uploaded $asset with SHA-256 $newhash"
