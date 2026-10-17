@@ -6,8 +6,6 @@ and general program polish. It is available as a JSFX for REAPER, a 64-bit
 Windows CLAP plug-in, a classic Winamp-compatible DSP plug-in, and a
 dual-bitness foobar2000 component for Windows.
 
-If a program does more than say “Hello, world!” and/or looks well-designed visually, every line responsible for such elevated standards was coded by AI—but the design is mine.
-
 The processor has three main controls: **Mode**, **Input**, and **Auto-Adapt**.
 That simplicity is intentional. OptiLab Core is designed to reach a useful,
 finished sound without building a large processor chain.
@@ -159,7 +157,7 @@ you want more automatic leveling, tone balancing, and protection.
 Source ownership and generated-file boundaries are documented in
 [`docs/REPOSITORY_LAYOUT.md`](docs/REPOSITORY_LAYOUT.md). CMake build trees,
 release staging, installed plug-ins, and local Graphify output are intentionally
-kept out of version control.
+kept out of version control. After all, most of these elements were generated as various models were used in the coding of this plugin. In fact, If a program does more than say “Hello, world!” and/or looks well-designed visually, every line responsible for such elevated standards was coded by AI—but the design is mine.
 
 ## Donations and contact
 
