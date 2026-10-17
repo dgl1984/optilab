@@ -6,6 +6,8 @@ and general program polish. It is available as a JSFX for REAPER, a 64-bit
 Windows CLAP plug-in, a classic Winamp-compatible DSP plug-in, and a
 dual-bitness foobar2000 component for Windows.
 
+If a program does more than say “Hello, world!” and/or looks well-designed visually, every line responsible for such elevated standards was coded by AI—but the design is mine.
+
 The processor has three main controls: **Mode**, **Input**, and **Auto-Adapt**.
 That simplicity is intentional. OptiLab Core is designed to reach a useful,
 finished sound without building a large processor chain.
