@@ -1,0 +1,36 @@
+OptiLab Core build manifest
+==========================
+
+Authoritative Windows entry point
+- BUILD_WINDOWS.bat -> BUILD_WINDOWS.ps1
+
+Generated build trees
+- build-windows-x64/
+- build-windows-x86/
+
+Public CTest targets
+- optilab-core-public-regression
+- optilab-wav-file-test
+- optilab-winamp-pcm-test
+- optilab-core-behavior-regression
+- optilab-winamp-delivery-test
+- Windows wrapper tests when their targets are available
+
+Optional maintainer tests
+- Added automatically when maintainer/CoreRegression.cpp is present.
+- -DOPTILAB_REQUIRE_MAINTAINER_TESTS=ON makes their absence a configuration error.
+- BUILD_WINDOWS.ps1 -RequireMaintainerTests applies the same release-review requirement.
+
+Release staging
+- dist/ : Windows binary payload and checksums
+- dist-source/ : scrubbed public source and checksums
+- scripts/package-public-source.ps1 : public-source whitelist/exclusion gate
+- public source archive root: OptiLab-Core/
+- SOURCE_MANIFEST.sha256 : per-file public source manifest
+- TESTING.md : public verification contract
+
+Generated validation evidence
+- BUILD_WINDOWS_LOG.txt
+- validation-logs/
+
+Generated logs, dependency trees, build trees, binaries, and maintainer-only material are not part of the public-source archive.

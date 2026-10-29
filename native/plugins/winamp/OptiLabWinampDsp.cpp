@@ -1,11 +1,15 @@
-﻿// Copyright 2026 Lanes Audio
+// Copyright 2026 Lanes Audio
 // SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
+
+
+
 #include "OptiLabCore.h"
 #include "OptiLabVersion.h"
 #include "WinampDspApi.h"
 #include "WinampPcm.h"
+#include "WinampDelivery.h"
 #include "resource.h"
 
 #include <commctrl.h>
@@ -30,7 +34,7 @@ constexpr int meterFloorMilliDb = -120000;
 HINSTANCE instanceHandle = nullptr;
 std::once_flag settingsLoadFlag;
 std::atomic<int> targetMode{0};
-std::atomic<int> targetInputTenths{35};
+std::atomic<int> targetInputTenths{0};
 std::atomic<int> targetAdaptPercent{0};
 std::atomic<int> targetVisualMeters{0};
 std::atomic<int> meterInputMilliDb{meterFloorMilliDb};
@@ -39,7 +43,7 @@ std::atomic<int> meterFullScaleSamples{0};
 
 struct DialogSettings {
     int mode = 0;
-    int inputTenths = 35;
+    int inputTenths = 0;
     int adaptPercent = 0;
     bool visualMeters = false;
 };
@@ -48,6 +52,7 @@ struct ProcessorState {
     OptiLabCore core;
     std::array<float, scratchFrames * 2> scratch{};
     int sampleRate = 0;
+    int channels = 0;
     int appliedMode = -1;
     int appliedInputTenths = 0;
     int appliedAdaptPercent = 0;
@@ -68,14 +73,14 @@ const wchar_t* settingsRegistryPath() noexcept {
             host = slash ? slash + 1 : executable.data();
         }
         std::swprintf(result.data(), result.size(),
-                      L"Software\\LanesAudio\\OptiLab Core\\Winamp DSP\\%ls", host);
+                      L"Software\\LanesAudio\\OptiLab Core\\Winamp DSP 1.5\\%ls", host);
         return result;
     }();
     return path.data();
 }
 
 int defaultInputTenths(int mode) noexcept {
-    return mode == 0 ? 35 : mode == 1 ? 10 : 0;
+    return mode == 1 ? 35 : 0;
 }
 
 void loadSettings() {
@@ -91,6 +96,11 @@ void loadSettings() {
                      nullptr, &value, &size) == ERROR_SUCCESS && value <= 300) {
         const int signedValue = static_cast<int>(value) - 120;
         targetInputTenths.store(signedValue, std::memory_order_relaxed);
+    }
+    size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER, registryPath, L"InputTenthsSymmetric", RRF_RT_REG_DWORD,
+                     nullptr, &value, &size) == ERROR_SUCCESS && value <= 360) {
+        targetInputTenths.store(static_cast<int>(value) - 180, std::memory_order_relaxed);
     }
     size = sizeof(value);
     if (RegGetValueW(HKEY_CURRENT_USER, registryPath, L"AdaptPercent", RRF_RT_REG_DWORD,
@@ -115,12 +125,12 @@ void saveSettings(const DialogSettings& settings) {
         return;
     }
     const DWORD mode = static_cast<DWORD>(settings.mode);
-    const DWORD input = static_cast<DWORD>(settings.inputTenths + 120);
+    const DWORD input = static_cast<DWORD>(settings.inputTenths + 180);
     const DWORD adapt = static_cast<DWORD>(settings.adaptPercent);
     const DWORD visualMeters = settings.visualMeters ? 1u : 0u;
     RegSetValueExW(key, L"Mode", 0, REG_DWORD,
                    reinterpret_cast<const BYTE*>(&mode), sizeof(mode));
-    RegSetValueExW(key, L"InputTenths", 0, REG_DWORD,
+    RegSetValueExW(key, L"InputTenthsSymmetric", 0, REG_DWORD,
                    reinterpret_cast<const BYTE*>(&input), sizeof(input));
     RegSetValueExW(key, L"AdaptPercent", 0, REG_DWORD,
                    reinterpret_cast<const BYTE*>(&adapt), sizeof(adapt));
@@ -129,10 +139,22 @@ void saveSettings(const DialogSettings& settings) {
     RegCloseKey(key);
 }
 
-void setInputText(HWND dialog, int inputTenths) {
+void setInputDrive(HWND dialog, int inputTenths) {
+    inputTenths = std::clamp(inputTenths, -180, 180);
+    SendDlgItemMessageW(dialog, IDC_INPUT_DRIVE, TBM_SETPOS, TRUE,
+                        static_cast<LPARAM>(inputTenths + 180));
     wchar_t text[32]{};
-    std::swprintf(text, std::size(text), L"%.1f", inputTenths / 10.0);
-    SetDlgItemTextW(dialog, IDC_INPUT_DRIVE, text);
+    std::swprintf(text, std::size(text), L"%+.1f dB", inputTenths / 10.0);
+    SetDlgItemTextW(dialog, IDC_INPUT_DRIVE_VALUE, text);
+}
+
+void setAutoAdapt(HWND dialog, int percent) {
+    percent = std::clamp(percent, 0, 100);
+    SendDlgItemMessageW(dialog, IDC_AUTO_ADAPT, TBM_SETPOS, TRUE,
+                        static_cast<LPARAM>(percent));
+    wchar_t text[32]{};
+    std::swprintf(text, std::size(text), L"%d%%", percent);
+    SetDlgItemTextW(dialog, IDC_AUTO_ADAPT_VALUE, text);
 }
 
 int peakToMilliDb(double peak) noexcept {
@@ -257,12 +279,18 @@ void updateMeters(HWND dialog) {
 
 void populateDialog(HWND dialog, DialogSettings& settings) {
     HWND mode = GetDlgItem(dialog, IDC_MODE);
-    SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Podcast Leveler"));
     SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Stream polish"));
+    SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Podcast Leveler"));
     SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Smooth Limiter"));
     SendMessageW(mode, CB_SETCURSEL, static_cast<WPARAM>(settings.mode), 0);
-    setInputText(dialog, settings.inputTenths);
-    SetDlgItemInt(dialog, IDC_AUTO_ADAPT, static_cast<UINT>(settings.adaptPercent), FALSE);
+    SendDlgItemMessageW(dialog, IDC_INPUT_DRIVE, TBM_SETRANGE, TRUE, MAKELONG(0, 360));
+    SendDlgItemMessageW(dialog, IDC_INPUT_DRIVE, TBM_SETTICFREQ, 50, 0);
+    SendDlgItemMessageW(dialog, IDC_INPUT_DRIVE, TBM_SETPAGESIZE, 0, 10);
+    SendDlgItemMessageW(dialog, IDC_AUTO_ADAPT, TBM_SETRANGE, TRUE, MAKELONG(0, 100));
+    SendDlgItemMessageW(dialog, IDC_AUTO_ADAPT, TBM_SETTICFREQ, 10, 0);
+    SendDlgItemMessageW(dialog, IDC_AUTO_ADAPT, TBM_SETPAGESIZE, 0, 10);
+    setInputDrive(dialog, settings.inputTenths);
+    setAutoAdapt(dialog, settings.adaptPercent);
     CheckDlgButton(dialog, IDC_VISUAL_METERS, settings.visualMeters ? BST_CHECKED : BST_UNCHECKED);
     SendDlgItemMessageW(dialog, IDC_INPUT_METER, PBM_SETRANGE32, 0,
                         static_cast<LPARAM>(-meterFloorMilliDb));
@@ -270,29 +298,6 @@ void populateDialog(HWND dialog, DialogSettings& settings) {
                         static_cast<LPARAM>(-meterFloorMilliDb));
     setMeterVisibility(dialog, settings.visualMeters);
     updateMeters(dialog);
-}
-
-bool parseNumber(HWND dialog, int control, double minimum, double maximum,
-                 double& result, const wchar_t* fieldName) {
-    wchar_t text[64]{};
-    GetDlgItemTextW(dialog, control, text, static_cast<int>(std::size(text)));
-    wchar_t* end = nullptr;
-    const double value = std::wcstod(text, &end);
-    while (end && *end == L' ') {
-        ++end;
-    }
-    if (end == text || (end && *end != L'\0') || !std::isfinite(value) ||
-        value < minimum || value > maximum) {
-        wchar_t message[160]{};
-        std::swprintf(message, std::size(message), L"%ls must be between %.1f and %.1f.",
-                      fieldName, minimum, maximum);
-        MessageBoxW(dialog, message, L"OptiLab Core", MB_OK | MB_ICONWARNING);
-        SetFocus(GetDlgItem(dialog, control));
-        SendDlgItemMessageW(dialog, control, EM_SETSEL, 0, -1);
-        return false;
-    }
-    result = value;
-    return true;
 }
 
 INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -314,6 +319,21 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         KillTimer(dialog, meterTimerId);
         return FALSE;
     }
+    if (message == WM_HSCROLL && settings) {
+        const HWND control = reinterpret_cast<HWND>(lParam);
+        if (control == GetDlgItem(dialog, IDC_INPUT_DRIVE)) {
+            settings->inputTenths = static_cast<int>(SendDlgItemMessageW(
+                dialog, IDC_INPUT_DRIVE, TBM_GETPOS, 0, 0)) - 180;
+            setInputDrive(dialog, settings->inputTenths);
+            return TRUE;
+        }
+        if (control == GetDlgItem(dialog, IDC_AUTO_ADAPT)) {
+            settings->adaptPercent = static_cast<int>(SendDlgItemMessageW(
+                dialog, IDC_AUTO_ADAPT, TBM_GETPOS, 0, 0));
+            setAutoAdapt(dialog, settings->adaptPercent);
+            return TRUE;
+        }
+    }
     if (message != WM_COMMAND || !settings) {
         return FALSE;
     }
@@ -324,19 +344,19 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         if (mode >= 0 && mode <= 2) {
             settings->mode = mode;
             settings->inputTenths = defaultInputTenths(mode);
-            setInputText(dialog, settings->inputTenths);
+            setInputDrive(dialog, settings->inputTenths);
         }
         return TRUE;
     }
     if (control == IDC_RESTORE_DEFAULTS) {
         settings->mode = 0;
-        settings->inputTenths = 35;
+        settings->inputTenths = 0;
         settings->adaptPercent = 0;
         settings->visualMeters = false;
         targetVisualMeters.store(0, std::memory_order_relaxed);
         SendDlgItemMessageW(dialog, IDC_MODE, CB_SETCURSEL, 0, 0);
-        setInputText(dialog, settings->inputTenths);
-        SetDlgItemInt(dialog, IDC_AUTO_ADAPT, 0, FALSE);
+        setInputDrive(dialog, settings->inputTenths);
+        setAutoAdapt(dialog, settings->adaptPercent);
         CheckDlgButton(dialog, IDC_VISUAL_METERS, BST_UNCHECKED);
         KillTimer(dialog, meterTimerId);
         setMeterVisibility(dialog, false);
@@ -356,15 +376,11 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         return TRUE;
     }
     if (control == IDOK) {
-        double input = 0.0;
-        double adapt = 0.0;
-        if (!parseNumber(dialog, IDC_INPUT_DRIVE, -12.0, 18.0, input, L"Input drive") ||
-            !parseNumber(dialog, IDC_AUTO_ADAPT, 0.0, 100.0, adapt, L"Auto-adapt")) {
-            return TRUE;
-        }
         settings->mode = static_cast<int>(SendDlgItemMessageW(dialog, IDC_MODE, CB_GETCURSEL, 0, 0));
-        settings->inputTenths = static_cast<int>(std::lround(input * 10.0));
-        settings->adaptPercent = static_cast<int>(std::lround(adapt));
+        settings->inputTenths = static_cast<int>(SendDlgItemMessageW(
+            dialog, IDC_INPUT_DRIVE, TBM_GETPOS, 0, 0)) - 180;
+        settings->adaptPercent = static_cast<int>(SendDlgItemMessageW(
+            dialog, IDC_AUTO_ADAPT, TBM_GETPOS, 0, 0));
         settings->visualMeters = IsDlgButtonChecked(dialog, IDC_VISUAL_METERS) == BST_CHECKED;
         EndDialog(dialog, IDOK);
         return TRUE;
@@ -385,11 +401,7 @@ void configure(WinampDspModule* module) {
         targetAdaptPercent.load(std::memory_order_relaxed),
         originalVisualMeters != 0,
     };
-    // A number of Winamp-compatible hosts provide a transient Preferences page
-    // as hwndParent rather than a stable top-level host window. Owning a modal
-    // dialog with that page disables it and can confuse host-specific screen
-    // reader focus handling. Keep Core's native settings dialog independent,
-    // as established Winamp DSP configuration windows normally appear.
+
     (void)module;
     const INT_PTR result = DialogBoxParamW(
         instanceHandle, MAKEINTRESOURCEW(IDD_OPTILAB_CONFIG), nullptr,
@@ -406,6 +418,8 @@ void configure(WinampDspModule* module) {
 }
 
 int initialize(WinampDspModule* module) {
+    INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_PROGRESS_CLASS | ICC_BAR_CLASSES};
+    InitCommonControlsEx(&controls);
     ensureSettingsLoaded();
     processor.prepared = false;
     processor.appliedMode = -1;
@@ -416,8 +430,8 @@ int initialize(WinampDspModule* module) {
 }
 
 void applySettings(ProcessorState& state) {
-    const int mode = std::clamp(targetMode.load(std::memory_order_relaxed), 0, 2);
-    const int input = std::clamp(targetInputTenths.load(std::memory_order_relaxed), -120, 180);
+    const int mode = static_cast<int>(OptiLabCore::sanitizeMode(targetMode.load(std::memory_order_relaxed)));
+    const int input = std::clamp(targetInputTenths.load(std::memory_order_relaxed), -180, 180);
     const int adapt = std::clamp(targetAdaptPercent.load(std::memory_order_relaxed), 0, 100);
     if (mode == state.appliedMode && input == state.appliedInputTenths &&
         adapt == state.appliedAdaptPercent) {
@@ -435,20 +449,32 @@ void applySettings(ProcessorState& state) {
 
 int modifySamples(WinampDspModule* module, short* samples, int frames, int bitsPerSample,
                   int channels, int sampleRate) {
-    if (!samples || frames <= 0 || sampleRate <= 0 || channels < 1 || channels > 2 ||
-        optilab::winamp::bytesPerSample(bitsPerSample) == 0) {
+    if (!samples || frames <= 0) {
         return frames;
     }
     auto* state = module && module->userData
                       ? static_cast<ProcessorState*>(module->userData)
                       : &processor;
-    if (!state->prepared || state->sampleRate != sampleRate) {
-        state->core.prepare(static_cast<double>(sampleRate));
-        state->sampleRate = sampleRate;
-        state->prepared = true;
-        state->appliedMode = -1;
+    if (channels < 1 || channels > 2 ||
+        optilab::winamp::bytesPerSample(bitsPerSample) == 0 ||
+        !OptiLabCoreEngine::isSampleRateSupported(sampleRate)) {
+        state->prepared = false;
+        return frames; // Unsupported formats pass through without crossing the DLL ABI with an exception.
     }
-    applySettings(*state);
+    if (!state->prepared || state->sampleRate != sampleRate || state->channels != channels) {
+        state->prepared = false;
+        try {
+            applySettings(*state);
+            state->core.prepare(static_cast<double>(sampleRate));
+        } catch (const std::exception&) {
+            return frames; // A failed preparation must not terminate the host.
+        }
+        state->sampleRate = sampleRate;
+        state->channels = channels;
+        state->prepared = true;
+    } else {
+        applySettings(*state);
+    }
 
     auto* bytes = reinterpret_cast<std::uint8_t*>(samples);
     const std::size_t frameBytes = optilab::winamp::bytesPerSample(bitsPerSample) *
@@ -471,6 +497,7 @@ int modifySamples(WinampDspModule* module, short* samples, int frames, int bitsP
                                      ? scratchPeak(state->scratch.data(), blockSamples)
                                      : 0.0;
         state->core.processInterleaved(state->scratch.data(), block, static_cast<std::size_t>(channels));
+        optilab::winamp::limitDelivery(state->scratch.data(), blockSamples);
         if (trackMeters) {
             const double outputPeak = scratchPeak(state->scratch.data(), blockSamples);
             publishPeak(meterInputMilliDb, peakToMilliDb(inputPeak));
@@ -524,7 +551,7 @@ WinampDspHeader header{
     getModule,
 };
 
-} // namespace
+}
 
 extern "C" WinampDspHeader* winampDSPGetHeader2() {
     return &header;
@@ -534,8 +561,6 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         instanceHandle = instance;
         module.hDllInstance = instance;
-        INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_PROGRESS_CLASS};
-        InitCommonControlsEx(&controls);
         DisableThreadLibraryCalls(instance);
     }
     return TRUE;

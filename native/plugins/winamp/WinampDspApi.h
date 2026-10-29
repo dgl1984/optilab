@@ -1,9 +1,12 @@
+// Copyright 2026 Lanes Audio
+// SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
+// Licensed under the Apache License, Version 2.0 with the Commons Clause
+// License Condition v1.0. See LICENSE and NOTICE in the repository root.
+
 #pragma once
 
 #include <windows.h>
 
-// Minimal declarations from the classic Winamp DSP/Effect plug-in ABI.
-// Keeping this local avoids making the DSP library depend on the legacy SDK.
 constexpr int winampDspHeaderVersion = 0x20;
 
 struct WinampDspModule {

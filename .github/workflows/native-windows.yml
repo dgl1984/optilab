@@ -1,12 +1,6 @@
 name: Native Windows
 
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-    paths-ignore:
-      - "**/*.md"
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -15,157 +9,24 @@ permissions:
 jobs:
   build-and-test:
     runs-on: windows-2022
-
     steps:
       - name: Check out source
         uses: actions/checkout@v6
-
-      - name: Install pinned foobar2000 SDK
-        shell: pwsh
-        run: ./scripts/setup-foobar2000-sdk.ps1
-
-      - name: Configure Win32
-        run: cmake --preset vs2022-win32 -S native
-
-      - name: Build Win32 Release
-        run: cmake --build native/build-winamp --config Release
-
-      - name: Test Win32 Release
-        run: ctest --test-dir native/build-winamp -C Release --output-on-failure
-
-      - name: Build and test Win32 foobar2000 component
-        run: |
-          cmake --preset vs2022-foobar2000-win32 -S native
-          cmake --build native/build-foobar2000-win32 --config Release
-          ctest --test-dir native/build-foobar2000-win32 -C Release --output-on-failure
-
-      - name: Verify DLL architecture, export, and runtime dependencies
-        shell: pwsh
-        run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $visualStudio = & $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath
-          $dumpbin = Get-ChildItem "$visualStudio\VC\Tools\MSVC" -Filter dumpbin.exe -Recurse |
-            Select-Object -First 1 -ExpandProperty FullName
-          $dll = "native\build-winamp\Release\dsp_optilab_core.dll"
-          $headers = & $dumpbin /headers /exports $dll | Out-String
-          if ($headers -notmatch "14C machine \(x86\)" -or
-              $headers -notmatch "winampDSPGetHeader2") {
-            throw "The DLL is not x86 or is missing winampDSPGetHeader2."
-          }
-          $dependencies = & $dumpbin /dependents $dll | Out-String
-          if ($dependencies -match "VCRUNTIME|MSVCP|api-ms-win-crt") {
-            throw "The Release DLL depends on the dynamic Microsoft C/C++ runtime."
-          }
-
-      - name: Configure x64
-        run: cmake --preset vs2022-x64 -S native
-
-      - name: Build and test x64 Release
-        run: |
-          cmake --build native/build --config Release
-          ctest --test-dir native/build -C Release --output-on-failure
-
-      - name: Build and test x64 foobar2000 component
-        run: |
-          cmake --preset vs2022-foobar2000-x64 -S native
-          cmake --build native/build-foobar2000-x64 --config Release
-          ctest --test-dir native/build-foobar2000-x64 -C Release --output-on-failure
-
-      - name: Verify CLAP architecture, export, and runtime dependencies
-        shell: pwsh
-        run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $visualStudio = & $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath
-          $dumpbin = Get-ChildItem "$visualStudio\VC\Tools\MSVC" -Filter dumpbin.exe -Recurse |
-            Select-Object -First 1 -ExpandProperty FullName
-          $plugin = "native\build\Release\OptiLab_Core.clap"
-          $headers = & $dumpbin /headers /exports $plugin | Out-String
-          if ($headers -notmatch "8664 machine \(x64\)" -or
-              $headers -notmatch "clap_entry") {
-            throw "The CLAP is not x64 or is missing clap_entry."
-          }
-          $dependencies = & $dumpbin /dependents $plugin | Out-String
-          if ($dependencies -match "VCRUNTIME|MSVCP|api-ms-win-crt") {
-            throw "The Release CLAP depends on the dynamic Microsoft C/C++ runtime."
-          }
-
-      - name: Package all plug-in candidates
-        shell: pwsh
-        run: |
-          ./scripts/package-all.ps1
-          ./scripts/package-foobar2000.ps1
-
-      - name: Upload tested release candidate
+      - name: Build and validate all Windows formats
+        shell: powershell
+        run: ./BUILD_WINDOWS.ps1
+      - name: Preserve complete validation logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: optilab-core-validation-logs
+          path: |
+            BUILD_WINDOWS_LOG.txt
+            validation-logs/**
+          if-no-files-found: warn
+      - name: Upload tested package
         uses: actions/upload-artifact@v7
         with:
           name: optilab-core-release-candidate
-          path: |
-            dist/OptiLab-Core-*.zip
-            dist/OptiLab-Core-*-SHA256.txt
-            dist/OptiLab_Core.clap
-            dist/dsp_optilab_core.dll
-            dist/foo_optilab_core-*.fb2k-component
-            dist/foo_optilab_core-*-SHA256.txt
+          path: dist/OptiLab-Core-*-Windows.zip
           if-no-files-found: error
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-and-test
-    runs-on: windows-2022
-    permissions:
-      contents: write
-
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v6
-
-      - name: Download tested release candidate
-        uses: actions/download-artifact@v8
-        with:
-          name: optilab-core-release-candidate
-          path: dist
-
-      - name: Create GitHub release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart("v")
-          $escapedVersion = [regex]::Escape($version)
-          $changelog = Get-Content -Raw -LiteralPath "CHANGELOG.md"
-          $releaseNotesMatch = [regex]::Match(
-            $changelog,
-            "(?ms)^## OptiLab Core v$escapedVersion\r?\n\r?\n(?<notes>.*?)(?=^## OptiLab Core v|\z)"
-          )
-          if (-not $releaseNotesMatch.Success) {
-            throw "CHANGELOG.md has no complete release notes for version $version."
-          }
-          $releaseNotes = $releaseNotesMatch.Groups["notes"].Value.Trim()
-          $releaseNotesPath = Join-Path (Resolve-Path "dist").Path "release-notes.md"
-          Set-Content -LiteralPath $releaseNotesPath -Value $releaseNotes -Encoding utf8
-          Copy-Item -LiteralPath "Effects\optilab_core.jsfx" -Destination "dist\optilab_core.jsfx"
-          $assets = @(
-            (Resolve-Path "dist\optilab_core.jsfx").Path
-            (Resolve-Path "dist\OptiLab_Core.clap").Path
-            (Resolve-Path "dist\dsp_optilab_core.dll").Path
-            (Resolve-Path "dist\OptiLab-Core-$version.zip").Path
-            (Resolve-Path "dist\OptiLab-Core-$version-SHA256.txt").Path
-            (Resolve-Path "dist\foo_optilab_core-$version.fb2k-component").Path
-            (Resolve-Path "dist\foo_optilab_core-$version-SHA256.txt").Path
-          )
-          gh release view $env:GITHUB_REF_NAME *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $env:GITHUB_REF_NAME @assets --clobber
-            gh release edit $env:GITHUB_REF_NAME `
-              --title "OptiLab Core $env:GITHUB_REF_NAME" `
-              --notes-file $releaseNotesPath
-          } else {
-            gh release create $env:GITHUB_REF_NAME @assets `
-              --verify-tag `
-              --title "OptiLab Core $env:GITHUB_REF_NAME" `
-              --notes-file $releaseNotesPath
-          }

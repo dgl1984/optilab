@@ -1,0 +1,24 @@
+OptiLab Core 1.5.0 — Third-party notices
+========================================
+
+OptiLab Core's LICENSE covers Lanes Audio first-party material where no more specific license is stated. Third-party frameworks, SDKs, and wrapper support retain their own terms.
+
+1. JUCE 8.0.12
+---------------
+JUCE is the framework used by the shared VST3/CLAP processor and editor. JUCE retains its own licensing terms and is not relicensed by Lanes Audio. See JUCE_NOTICE.txt.
+
+2. CLAP and CLAP/JUCE wrapper support
+-------------------------------------
+The CLAP build uses pinned free-audio clap-juce-extensions plus its CLAP and clap-helpers submodules. The pinned wrapper commit is 55525c9858d4b25687be7759a5e0f70eccef218e; its pinned CLAP commit is 29ffcc273be7c7c651f6c9953b99e69700e2387a and clap-helpers commit is a61bcdf0ecc2c8db1e80bfe8bf9cb7e8d9fd2bbc. Their MIT-style license texts are included as CLAP_JUCE_EXTENSIONS_LICENSE.txt, CLAP_LICENSE.txt, and CLAP_HELPERS_LICENSE.txt. VST3 and CLAP use the same OptiLab Core JUCE processor/editor and shared DSP.
+
+3. foobar2000 SDK
+-----------------
+The foobar2000 component is built against the pinned foobar2000 SDK 2026-10-01. The installable .fb2k-component package carries the SDK's own sdk-license.txt as foobar2000-sdk-license.txt. The SDK is a third-party development dependency and is not relicensed by OptiLab Core.
+
+DESIGN ACKNOWLEDGEMENT — x42 Digital Peak Limiter
+--------------------------------------------------
+The history-aware final-limiter research in OptiLab Core 1.5 was influenced by
+the x42 Digital Peak Limiter by Fons Adriaensen and Robin Gareus, discovered
+through chmaha's REAPER JSFX port. OptiLab Core does not include or distribute
+x42-DPL source code; this acknowledgement records design/research influence.
+The upstream x42-DPL project is licensed GPLv3 or later.

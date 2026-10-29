@@ -1,7 +1,10 @@
-﻿// Copyright 2026 Lanes Audio
+// Copyright 2026 Lanes Audio
 // SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
+
+
+
 #pragma once
 
 #include <cstddef>
@@ -17,4 +20,4 @@ bool decodeInterleaved(const std::uint8_t* source, std::size_t frames, int chann
 bool encodeInterleaved(const float* source, std::size_t frames, int channels,
                        int bitsPerSample, std::uint8_t* destination) noexcept;
 
-} // namespace optilab::winamp
+}

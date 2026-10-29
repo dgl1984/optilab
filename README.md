@@ -1,189 +1,83 @@
 # OptiLab Core
 
-OptiLab Core is a free, accessible broadcast and mastering audio processor from
-LanesAudio. It combines leveling, density, tone control, saturation, limiting,
-and general program polish. It is available as a JSFX for REAPER, a 64-bit
-Windows CLAP plug-in, a classic Winamp-compatible DSP plug-in, and a
-dual-bitness foobar2000 component for Windows.
+I created Core because I was tired of the sound I kept hearing from a lot of default processing, especially on online streams: loud and controlled, but too often flatter, harsher, smaller, or simply less interesting than the material deserved.
 
-The processor has three main controls: **Mode**, **Input**, and **Auto-Adapt**.
-That simplicity is intentional. OptiLab Core is designed to reach a useful,
-finished sound without building a large processor chain.
+Core is my answer to that. Instead of asking you to adjust each stage separately, it lets you work with the overall behavior of the processor. I also use it as a tool to learn, experiment, and teach—to explore what processing does to sound without requiring every individual decision to be made separately.
 
-It does not provide audio restoration and cannot repair damaged recordings. It
-is intended for podcasts, streams, voice work, music playback, internet radio,
-and quick mastering-style polish.
+The processor coordinates the details. You still decide what sounds good.
 
-## Modes
+If a program does more than say “Hello, world!” and/or looks well-designed visually, every line responsible for such elevated standards was coded by AI—but the design is mine. The user guide includes a fuller answer about the human and AI contributions to OptiLab.
 
-### Podcast Leveler
+OptiLab Core is a free, accessible broadcast and mastering processor from Lanes Audio. Choose a **Mode**, decide how hard to feed it with **Input Drive**, and turn **Auto-Adapt** until the result is where you want it. There is no magic percentage that is right for every recording.
 
-Designed for speech, podcasts, voice tracks, and mixed voice content. It focuses
-on leveling, control, and a smoother mid-focused sound.
+[**Published downloads**](https://github.com/dgl1984/optilab/releases) · [**Read the user guide**](docs/USER_GUIDE.md)
 
-### Stream polish
+## Version 1.5.0
 
-Designed for music, internet radio, and higher-energy material. It provides a
-more finished broadcast-style sound without requiring extensive setup.
+Download **1.5.0** as one Windows ZIP containing all supported formats. The complete public source is included when you clone this repository. See the [release notes](RELEASE_NOTES.md), [change history](CHANGELOG.md), and [user guide](docs/USER_GUIDE.md).
 
-### Smooth Limiter
+Version 1.5 rebuilds Core around the current processing engine while keeping the same three-control workflow. The idea is to make each of those three choices count.
 
-Designed for clean limiting and mastering-style use where peak control is more
-important than an aggressive broadcast sound.
+**Stream polish** is now the first Mode in the native formats and the fresh-instance default in every format. JSFX preserves its legacy Mode numbering for existing sessions. **Podcast Leveler** has developed into a distinctly flatter, more controlled talk-station-style voicing. **Smooth Limiter** now has a clearer progression from gentle mastering-style control toward its strongest event-limiting endpoint.
 
-## Controls
+## Formats
 
-- **Mode** chooses the general processing behavior.
-- **Input** controls how hard the processor is driven.
-- **Auto-Adapt** adjusts several leveling, tone, density, and protection stages
-  together.
+| Format | Windows architecture |
+|---|---|
+| VST3 | 64-bit |
+| CLAP | 64-bit |
+| Winamp-compatible DSP | 32-bit |
+| foobar2000 | 32-bit and 64-bit in one component package |
+| JSFX | REAPER effect; source included in `Effects` |
 
-Start gently. If the result becomes too flat, dense, or pushed, lower Input
-before changing everything else.
+## Modes and controls
 
-## What is new in v1.4.0
+**Stream polish** is the default. Use it when you want a bigger, more controlled sound across mixed content such as music, games, speech, streams and radio. At 0% Auto-Adapt it already has a useful processing sound; higher settings explore more intense voicings. It starts Input Drive at 0 dB.
 
-Version 1.4.0 strengthens the upper end of **Stream polish Auto-Adapt**. At
-100%, it can produce more sustained loudness and firmer high-frequency control
-on real program material without adding controls or changing the final delivery
-target.
+**Podcast Leveler** is for a flatter, more consistent sound that helps very different voices and sources feel as though they belong in the same program. Its overall approach is similar in spirit to modern talk-station processing. It is designed around speech, but try it on other material too. It starts Input Drive at +3.5 dB.
 
-High Auto-Adapt settings can bring sustained material forward more noticeably,
-while bright events receive more independent control. If final limiting remains
-heavy, Core automatically eases the lift and withdraws positive bass assistance
-instead of allowing the stages to fight or become unnecessarily crushed.
+**Smooth Limiter** is for already reasonably balanced material when you mainly want smooth loudness and peak control. It starts Input Drive at 0 dB and expects you to use Input Drive to decide how hard the material hits the limiter.
 
-Silence, low-level noise, and rumble do not cause the slow loudness lift to
-build. The response is blended continuously across the Auto-Adapt range rather
-than switching abruptly. The final output target remains **-0.1 dBFS**.
+All three modes now finish through the same history-aware, reconstruction-aware delivery limiter. The modes still sound different because the processing before that limiter is different; the final limiter itself is deliberately shared.
 
-For StationPlaylist compatibility, the Settings window now opens independently
-of the host's Preferences page to avoid focus and speech conflicts with NVDA.
-Its optional meters also avoid redundant accessible label updates.
+Fresh instances start on **Stream polish**, with Input Drive at 0 dB and Auto-Adapt at 0%.
 
-## Output ceiling and sample rates
+For practical guidance on the controls, the three voicings, and how Auto-Adapt changes each one, read the [user guide](docs/USER_GUIDE.md).
 
-OptiLab Core now uses a reconstruction-aware final delivery limiter. In addition
-to controlling the stored output samples, it detects intersample peaks that can
-become actual overs when audio is converted between common sample rates such as
-44.1 and 48 kHz.
+## Installation
 
-The final output target remains **-0.1 dBFS**. The delivery limiter is designed
-to act only when reconstruction-aware peak safety requires it rather than
-lowering the entire program for extra headroom.
+- **VST3:** copy the complete `OptiLab Core.vst3` bundle to your VST3 folder and rescan.
+- **CLAP:** copy `OptiLab Core.clap` to your CLAP folder and rescan. Read the [CLAP upgrade note](CHANGELOG.md#clap-upgrade-note) before replacing the 1.4 CLAP plugin.
+- **Winamp-compatible hosts:** copy `dsp_optilab_core.dll` to the host's DSP plugin folder.
+- **foobar2000:** install `foo_optilab_core-1.5.0.fb2k-component` through **Preferences > Components**. The installer selects the appropriate architecture; do not copy the archive or a loose DLL into `user-components`.
 
-Downstream processing, unusual resamplers, and lossy codecs can still alter peaks
-after Core, so measuring the final delivered file remains good practice.
+- **JSFX:** copy `Effects/optilab_core.jsfx` to your REAPER resource directory's `Effects` folder, then insert it as a JS effect. See [JSFX notes and validation](docs/JSFX.md).
 
-## Downloads
+## First use
 
-Release downloads are available from the repository's GitHub Releases page.
+1. Insert Core on a stereo track or bus and start with **Stream polish**.
+2. Begin at 0 dB **Input Drive** and 0% **Auto-Adapt** while checking your source level.
+3. Raise Auto-Adapt gradually and compare at a similar listening level.
+4. Try Podcast Leveler for consistent speech, or Smooth Limiter for material
+   that mainly needs peak control. Each mode has its own fresh Input Drive default.
 
-**Updating from a previous version?** Download the bare plug-in files and replace
-what you have — no extraction needed:
+The [user guide](docs/USER_GUIDE.md) walks from installation and finding your way around to the controls, each Mode, and what to listen for.
+Back up important projects and read the [CLAP upgrade note](CHANGELOG.md#clap-upgrade-note)
+before replacing an older installation.
 
-- `OptiLab_Core.clap` — drop-in replacement for the 64-bit Windows CLAP plug-in.
-- `dsp_optilab_core.dll` — drop-in replacement for the Winamp-compatible DSP.
-- `foo_optilab_core-1.4.0.fb2k-component` — installable Win32 and x64
-  foobar2000 component.
-- `optilab_core.jsfx` — drop-in replacement for REAPER users.
+## Accessibility
 
-**Complete Package:** Download `OptiLab-Core-1.4.0.zip` to get all three plug-in
-formats (`OptiLab_Core.clap`, `dsp_optilab_core.dll`, `optilab_core.jsfx`),
-documentation, and SHA-256 checksums in a single archive.
+The JUCE VST3 and CLAP editor provides named controls, keyboard operation, visible focus, and exact value entry. Generic host parameter access remains available. See [keyboard and accessibility guidance](docs/CLAP_ACCESSIBILITY.md).
 
-The release also provides `OptiLab-Core-1.4.0-SHA256.txt` separately so the ZIP
-can be verified before extraction.
+Winamp-compatible hosts and foobar2000 use native Windows settings dialogs.
 
-## REAPER installation
+## Build from source
 
-1. Download `optilab_core.jsfx` from the latest release.
-2. In REAPER, choose **Options > Show REAPER resource path in explorer/finder**.
-3. Open the `Effects` folder and copy the JSFX file into it.
-4. Restart REAPER if it is already running.
-5. Add OptiLab Core from REAPER's FX browser.
+See [Windows build instructions](docs/BUILDING.md). Run `BUILD_WINDOWS.bat` to fetch pinned dependencies, build all Windows formats, run the public native and JSFX regression sets, and stage both binary and public-source packages. Outputs appear under `dist` and `dist-source`; nothing is installed automatically. See [TESTING.md](TESTING.md) for the public verification contract and the [release procedure](RELEASING.md) for validation and publication requirements.
 
-## CLAP installation
+## License and contact
 
-1. Download `OptiLab-Core-1.4.0.zip` (and extract `OptiLab_Core.clap`), or
-   download `OptiLab_Core.clap` directly.
-2. Close the CLAP host.
-3. Copy `OptiLab_Core.clap` to
-   `%LOCALAPPDATA%\Programs\Common\CLAP`.
-4. Restart the host or perform a full plug-in rescan.
+See [LICENSE](LICENSE), [NOTICE](NOTICE), and [third-party notices](Licenses/THIRD_PARTY_NOTICES.txt). Dependency licenses remain unchanged.
 
-See [`native/CLAP.md`](native/CLAP.md) for controls, accessibility, build
-instructions, and host behavior.
-
-## foobar2000 installation
-
-1. Download `foo_optilab_core-1.4.0.fb2k-component`.
-2. Open the downloaded package with foobar2000 and approve the component
-   installation.
-3. Restart foobar2000 when prompted.
-4. Open **Preferences > Playback > DSP Manager**, add **OptiLab Core** to the
-   active DSP chain, and configure it.
-
-The package contains both Win32 and x64 DLLs in foobar2000's standard
-dual-architecture layout. See [`native/FOOBAR2000.md`](native/FOOBAR2000.md)
-for build, controls, accessibility, and packaging details.
-
-## StationPlaylist and Winamp-compatible DSP installation and use
-
-The Windows DLL uses the classic 32-bit Winamp DSP/Effect interface. It can be
-used by Winamp and by compatible Windows broadcast applications that support
-Winamp DSP plug-ins.
-
-1. Download `OptiLab-Core-1.4.0.zip` (and extract `dsp_optilab_core.dll`), or
-   download `dsp_optilab_core.dll` directly.
-2. Close the host application.
-3. Copy `dsp_optilab_core.dll` into the host's Winamp DSP plug-in folder.
-4. Restart the host and select **OptiLab Core 1.4.0** in its DSP configuration.
-
-Winamp normally uses `C:\Program Files (x86)\Winamp\Plugins`. Writing there may
-require administrator approval. Other hosts choose their own plug-in folders.
-
-The configuration window opens independently of StationPlaylist's Preferences
-page and uses standard Windows controls with keyboard access, normal focus
-indication, and screen-reader-friendly labels. See
-[`native/WINAMP.md`](native/WINAMP.md) for complete details and troubleshooting.
-
-Use the Winamp DSP the same way you use the JSFX: choose a mode, set Input so
-the processor is working without sounding overdriven, then raise Auto-Adapt if
-you want more automatic leveling, tone balancing, and protection.
-
-## Development Layout
-
-Source ownership and generated-file boundaries are documented in
-[`docs/REPOSITORY_LAYOUT.md`](docs/REPOSITORY_LAYOUT.md). CMake build trees,
-release staging, installed plug-ins, and local Graphify output are intentionally
-kept out of version control. After all, most of these elements were generated as various models were used in the coding of this plugin. In fact, If a program does more than say “Hello, world!” and/or looks well-designed visually, every line responsible for such elevated standards was coded by AI—but the design is mine.
-
-## Donations and contact
-
-OptiLab Core is free. Donations are welcome but never required.
-
-[Donate via PayPal](https://paypal.me/dgl1984)
-
-Questions, bug reports, and accessibility feedback: `info@lanesaudio.com`
-
-## License
-
-OptiLab Core v1.3.0 and later are **source-available** under the Apache License
-2.0 with the Commons Clause License Condition v1.0. See [LICENSE](LICENSE).
-
-You are explicitly welcome to use OptiLab Core for personal or commercial
-**audio work**. This includes paid production and mastering, commercial radio
-and broadcasting, monetized streams and podcasts, released music, and similar
-work. Lanes Audio claims no royalty or ownership interest in audio merely
-because OptiLab Core processed it.
-
-The source may be inspected, studied, modified, and redistributed subject to the
-license. However, the license does **not** permit selling OptiLab Core itself, a
-rebranded or lightly modified version of it, or another product or service whose
-value derives entirely or substantially from OptiLab Core's software
-functionality. Contact `info@lanesaudio.com` to discuss a separate commercial
-software license.
-
-OptiLab Core releases published before v1.3.0 remain under the license terms
-under which those versions were originally released.
+Donations: https://paypal.me/dgl1984
+Contact: info@lanesaudio.com

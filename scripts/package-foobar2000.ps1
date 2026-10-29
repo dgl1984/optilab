@@ -31,6 +31,27 @@ foreach ($component in @($x64Dll, $win32Dll)) {
     }
 }
 
+# Directory names do not establish bitness. Reject swapped or stale binaries
+# before modifying an existing release package.
+function Assert-ComponentArchitecture([string]$path, [uint16]$expectedMachine) {
+    $bytes = [IO.File]::ReadAllBytes($path)
+    if ($bytes.Length -lt 64 -or [BitConverter]::ToUInt16($bytes, 0) -ne 0x5A4D) {
+        throw "Not a Windows PE component: $path"
+    }
+    $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+    if ($peOffset -lt 64 -or $peOffset -gt ($bytes.Length - 24) -or
+        [BitConverter]::ToUInt32($bytes, $peOffset) -ne 0x00004550) {
+        throw "Invalid Windows PE header: $path"
+    }
+    $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+    if ($machine -ne $expectedMachine) {
+        throw ('Wrong component architecture in {0}: expected 0x{1:X4}, found 0x{2:X4}. Rebuild for the correct platform.' -f $path, $expectedMachine, $machine)
+    }
+}
+
+Assert-ComponentArchitecture $x64Dll 0x8664
+Assert-ComponentArchitecture $win32Dll 0x014C
+
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
 $stage = Join-Path $outputRoot "foo_optilab_core-$version-stage"
 $zipPackage = Join-Path $outputRoot "foo_optilab_core-$version.zip"

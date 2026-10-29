@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
+
+
+
 #include <winsock2.h>
 #include <windows.h>
 #include <commctrl.h>
@@ -11,11 +14,13 @@
 #include <SDK/foobar2000.h>
 
 #include "OptiLabCore.h"
+#include "OptiLabDenormalGuard.h"
 #include "OptiLabVersion.h"
 #include "FoobarCoreParameterAdapter.h"
 #include "resource.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -29,22 +34,39 @@ constexpr GUID componentGuid = {
     0xd0b1e8b4, 0x0f9e, 0x4a23, {0x89, 0xf1, 0xaa, 0xd8, 0xa5, 0x11, 0x99, 0x23}};
 
 struct PresetData {
-    std::int32_t version = 1;
+    std::int32_t version = 3;
     std::int32_t mode = 0;
-    std::int32_t inputTenths = 35;
+    std::int32_t inputTenths = 0;
     std::int32_t adaptPercent = 0;
 };
 
 static_assert(sizeof(PresetData) == 16, "The foobar2000 preset format must remain stable.");
 
 PresetData sanitized(PresetData value) noexcept {
-    if (value.version != 1) {
+    if (value.version != 3) {
         return {};
     }
-    value.mode = std::clamp(value.mode, 0, 2);
-    value.inputTenths = std::clamp(value.inputTenths, -120, 180);
+    value.mode = static_cast<int>(OptiLabCore::sanitizeMode(value.mode));
+    value.inputTenths = std::clamp(value.inputTenths, -180, 180);
     value.adaptPercent = std::clamp(value.adaptPercent, 0, 100);
     return value;
+}
+
+
+std::uint32_t packPreset(PresetData value) noexcept {
+    value = sanitized(value);
+    const auto mode = static_cast<std::uint32_t>(value.mode);
+    const auto input = static_cast<std::uint32_t>(value.inputTenths + 180);
+    const auto adapt = static_cast<std::uint32_t>(value.adaptPercent);
+    return mode | (input << 2) | (adapt << 11);
+}
+
+PresetData unpackPreset(std::uint32_t packed) noexcept {
+    PresetData value{};
+    value.mode = static_cast<std::int32_t>(packed & 0x3u);
+    value.inputTenths = static_cast<std::int32_t>((packed >> 2) & 0x1ffu) - 180;
+    value.adaptPercent = static_cast<std::int32_t>((packed >> 11) & 0x7fu);
+    return sanitized(value);
 }
 
 PresetData parsePreset(const dsp_preset& preset) noexcept {
@@ -74,31 +96,13 @@ int defaultInputTenths(int mode) noexcept {
     return static_cast<int>(std::lround(defaults.inputDriveDb * 10.0));
 }
 
-constexpr int inputIndexFromTenths(int tenths) noexcept {
-    return 180 - tenths;
-}
-
-constexpr int inputTenthsFromIndex(int index) noexcept {
-    return 180 - index;
-}
-
-static_assert(inputIndexFromTenths(180) == 0);
-static_assert(inputIndexFromTenths(-120) == 300);
-static_assert(inputTenthsFromIndex(inputIndexFromTenths(35)) == 35);
-
-void populateInputDrive(HWND dialog, int inputTenths) {
-    const HWND input = GetDlgItem(dialog, IDC_OPTILAB_INPUT_DRIVE);
-    if (SendMessageW(input, CB_GETCOUNT, 0, 0) == 0) {
-        // A closed combo box handles Up by selecting the preceding item.
-        // Store values high-to-low so Up raises drive and Down lowers it.
-        for (int tenths = 180; tenths >= -120; --tenths) {
-            wchar_t text[32]{};
-            std::swprintf(text, std::size(text), L"%+.1f dB", tenths / 10.0);
-            SendMessageW(input, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
-        }
-    }
-    SendMessageW(input, CB_SETCURSEL,
-                 static_cast<WPARAM>(inputIndexFromTenths(inputTenths)), 0);
+void setInputDrive(HWND dialog, int inputTenths) {
+    inputTenths = std::clamp(inputTenths, -180, 180);
+    SendDlgItemMessageW(dialog, IDC_OPTILAB_INPUT_DRIVE, TBM_SETPOS, TRUE,
+                        static_cast<LPARAM>(inputTenths + 180));
+    wchar_t text[32]{};
+    std::swprintf(text, std::size(text), L"%+.1f dB", inputTenths / 10.0);
+    SetDlgItemTextW(dialog, IDC_OPTILAB_INPUT_DRIVE_VALUE, text);
 }
 
 void setAutoAdapt(HWND dialog, int percent) {
@@ -112,11 +116,15 @@ void setAutoAdapt(HWND dialog, int percent) {
 
 void populateDialog(HWND dialog, PresetData& data) {
     const HWND mode = GetDlgItem(dialog, IDC_OPTILAB_MODE);
-    SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Podcast Leveler"));
     SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Stream polish"));
+    SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Podcast Leveler"));
     SendMessageW(mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Smooth Limiter"));
     SendMessageW(mode, CB_SETCURSEL, static_cast<WPARAM>(data.mode), 0);
-    populateInputDrive(dialog, data.inputTenths);
+    SendDlgItemMessageW(dialog, IDC_OPTILAB_INPUT_DRIVE, TBM_SETRANGE, TRUE,
+                        MAKELONG(0, 360));
+    SendDlgItemMessageW(dialog, IDC_OPTILAB_INPUT_DRIVE, TBM_SETTICFREQ, 50, 0);
+    SendDlgItemMessageW(dialog, IDC_OPTILAB_INPUT_DRIVE, TBM_SETPAGESIZE, 0, 10);
+    setInputDrive(dialog, data.inputTenths);
     SendDlgItemMessageW(dialog, IDC_OPTILAB_AUTO_ADAPT, TBM_SETRANGE, TRUE,
                         MAKELONG(0, 100));
     SendDlgItemMessageW(dialog, IDC_OPTILAB_AUTO_ADAPT, TBM_SETTICFREQ, 10, 0);
@@ -132,12 +140,20 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         populateDialog(dialog, *data);
         return TRUE;
     }
-    if (message == WM_HSCROLL && data &&
-        reinterpret_cast<HWND>(lParam) == GetDlgItem(dialog, IDC_OPTILAB_AUTO_ADAPT)) {
-        data->adaptPercent = static_cast<std::int32_t>(SendDlgItemMessageW(
-            dialog, IDC_OPTILAB_AUTO_ADAPT, TBM_GETPOS, 0, 0));
-        setAutoAdapt(dialog, data->adaptPercent);
-        return TRUE;
+    if (message == WM_HSCROLL && data) {
+        const HWND control = reinterpret_cast<HWND>(lParam);
+        if (control == GetDlgItem(dialog, IDC_OPTILAB_INPUT_DRIVE)) {
+            data->inputTenths = static_cast<std::int32_t>(SendDlgItemMessageW(
+                dialog, IDC_OPTILAB_INPUT_DRIVE, TBM_GETPOS, 0, 0)) - 180;
+            setInputDrive(dialog, data->inputTenths);
+            return TRUE;
+        }
+        if (control == GetDlgItem(dialog, IDC_OPTILAB_AUTO_ADAPT)) {
+            data->adaptPercent = static_cast<std::int32_t>(SendDlgItemMessageW(
+                dialog, IDC_OPTILAB_AUTO_ADAPT, TBM_GETPOS, 0, 0));
+            setAutoAdapt(dialog, data->adaptPercent);
+            return TRUE;
+        }
     }
     if (message != WM_COMMAND || !data) {
         return FALSE;
@@ -150,22 +166,22 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
         if (selected >= 0 && selected <= 2) {
             data->mode = selected;
             data->inputTenths = defaultInputTenths(selected);
-            populateInputDrive(dialog, data->inputTenths);
+            setInputDrive(dialog, data->inputTenths);
         }
         return TRUE;
     }
     if (control == IDC_OPTILAB_RESTORE_DEFAULTS) {
         *data = {};
         SendDlgItemMessageW(dialog, IDC_OPTILAB_MODE, CB_SETCURSEL, 0, 0);
-        populateInputDrive(dialog, data->inputTenths);
+        setInputDrive(dialog, data->inputTenths);
         setAutoAdapt(dialog, data->adaptPercent);
         return TRUE;
     }
     if (control == IDOK) {
         data->mode = static_cast<std::int32_t>(SendDlgItemMessageW(
             dialog, IDC_OPTILAB_MODE, CB_GETCURSEL, 0, 0));
-        data->inputTenths = inputTenthsFromIndex(static_cast<int>(SendDlgItemMessageW(
-            dialog, IDC_OPTILAB_INPUT_DRIVE, CB_GETCURSEL, 0, 0)));
+        data->inputTenths = static_cast<std::int32_t>(SendDlgItemMessageW(
+            dialog, IDC_OPTILAB_INPUT_DRIVE, TBM_GETPOS, 0, 0)) - 180;
         data->adaptPercent = static_cast<std::int32_t>(SendDlgItemMessageW(
             dialog, IDC_OPTILAB_AUTO_ADAPT, TBM_GETPOS, 0, 0));
         EndDialog(dialog, IDOK);
@@ -181,8 +197,10 @@ INT_PTR CALLBACK configDialogProc(HWND dialog, UINT message, WPARAM wParam, LPAR
 class OptiLabFoobar2000 : public dsp_impl_base_t<dsp_v3> {
 public:
     explicit OptiLabFoobar2000(const dsp_preset& preset)
-        : preset_(parsePreset(preset)) {
-        applyFoobarCoreParameters(core_, coreParameters(preset_));
+        : activePreset_(parsePreset(preset)),
+          pendingPreset_(packPreset(activePreset_)),
+          appliedPresetBits_(packPreset(activePreset_)) {
+        applyFoobarCoreParameters(core_, coreParameters(activePreset_));
     }
 
     static GUID g_get_guid() { return componentGuid; }
@@ -213,10 +231,13 @@ public:
 
     bool on_chunk(audio_chunk* chunk, abort_callback&) override {
         const unsigned channels = chunk->get_channels();
-        if (channels < 1 || channels > 2) {
+        if (channels < 1 || channels > 2 ||
+            !OptiLabCoreEngine::isSampleRateSupported(chunk->get_sample_rate())) {
             prepared_ = false;
+            latencySeconds_.store(0.0, std::memory_order_release);
             return true;
         }
+        applyPendingPreset();
         prepareFor(chunk->get_sample_rate(), channels, chunk->get_channel_config());
         process(chunk->get_data(), chunk->get_sample_count(), channels);
         return true;
@@ -245,23 +266,33 @@ public:
     }
 
     double get_latency() override {
-        return prepared_ && sampleRate_ > 0
-                   ? static_cast<double>(latencyFrames_) / sampleRate_
-                   : 0.0;
+        return latencySeconds_.load(std::memory_order_acquire);
     }
 
     bool need_track_change_mark() override { return false; }
 
     bool apply_preset(const dsp_preset& preset) override {
-        preset_ = parsePreset(preset);
-        applyFoobarCoreParameters(core_, coreParameters(preset_));
-        if (prepared_) {
-            latencyFrames_ = core_.latencySamples();
-        }
+        pendingPreset_.store(packPreset(parsePreset(preset)), std::memory_order_release);
         return true;
     }
 
 private:
+    void applyPendingPreset() {
+        const auto packed = pendingPreset_.load(std::memory_order_acquire);
+        if (packed == appliedPresetBits_) return;
+
+        activePreset_ = unpackPreset(packed);
+        appliedPresetBits_ = packed;
+
+        if (prepared_) {
+            applyFoobarCoreParameters(core_, coreParameters(activePreset_));
+            latencyFrames_ = core_.latencySamples();
+            latencySeconds_.store(
+                sampleRate_ > 0 ? static_cast<double>(latencyFrames_) / sampleRate_ : 0.0,
+                std::memory_order_release);
+        }
+    }
+
     void prepareFor(unsigned sampleRate, unsigned channels, unsigned channelConfig) {
         if (prepared_ && sampleRate_ == sampleRate && channels_ == channels &&
             channelConfig_ == channelConfig) {
@@ -271,12 +302,15 @@ private:
         channels_ = channels;
         channelConfig_ = channelConfig;
         core_.prepare(static_cast<double>(sampleRate));
-        applyFoobarCoreParameters(core_, coreParameters(preset_));
+        applyFoobarCoreParameters(core_, coreParameters(activePreset_));
         latencyFrames_ = core_.latencySamples();
         prepared_ = true;
+        latencySeconds_.store(
+            static_cast<double>(latencyFrames_) / sampleRate_, std::memory_order_release);
     }
 
     void process(audio_sample* samples, std::size_t frames, unsigned channels) {
+        const OptiLabDenormalGuard denormalGuard;
         for (std::size_t frame = 0; frame < frames; ++frame) {
             const std::size_t index = frame * channels;
             const float left = static_cast<float>(samples[index]);
@@ -292,7 +326,10 @@ private:
     }
 
     OptiLabCore core_;
-    PresetData preset_{};
+    PresetData activePreset_{};
+    std::atomic<std::uint32_t> pendingPreset_{0};
+    std::uint32_t appliedPresetBits_ = 0;
+    std::atomic<double> latencySeconds_{0.0};
     unsigned sampleRate_ = 0;
     unsigned channels_ = 0;
     unsigned channelConfig_ = 0;
@@ -302,7 +339,7 @@ private:
 
 static dsp_factory_t<OptiLabFoobar2000> componentFactory;
 
-} // namespace
+}
 
 DECLARE_COMPONENT_VERSION(
     "OptiLab Core", OPTILAB_VERSION_STRING,

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.0 — changes since 1.4.0
+
+- Rebuilt Core around the current processing engine while keeping Mode, Input Drive and Auto-Adapt as the three controls. Stream is the fresh default, with a useful sound at 0% and more intensity as Auto-Adapt rises. Stream has no high-end roll-off filter.
+- Reworked Podcast Leveler for a flatter, more consistent presentation, and Smooth Limiter for a wider range from restrained mastering to stronger event limiting.
+- Added 64-bit VST3 and updated CLAP. Both retain dB readouts and exact value entry. Input Drive now runs from -18 to +18 dB in every format, with 0 dB at the midpoint. Winamp and foobar2000 use sliders for Input Drive and Auto-Adapt, and a combo box for Mode.
+- Improved live parameter changes, mode latency reporting, saved-state handling and host playback recovery. The JSFX companion follows the updated processing and Adapt behavior.
+
+- Corrected foobar2000 packaging: the component contains x86 at its root and x64 in its x64 directory. Packaging now rejects DLLs with the wrong architecture. Thanks to Nick Giannak III for the correction.
+
+### CLAP upgrade note
+
+The 1.5 CLAP implementation uses different saved-state handling and parameter IDs from the older wrapper. Existing projects and automation made with the older CLAP version may not migrate automatically. Keep the previous plugin available until important projects have been checked; settings may need to be transferred manually.
+
 ## OptiLab Core v1.4.0 foobar2000 component
 
 Published August 31, 2026 as an optional host adapter for the existing

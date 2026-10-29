@@ -1,19 +1,26 @@
-# OS files
+/.cache/
+/.vs/
+/native/third_party/
+/native/build*/
+/native/CMakeUserPresets.json
+/build*/
+/dist/
+/dist-source/
+/validation-logs/
+/BUILD_WINDOWS_LOG.txt
+/OptiLab-Core-*-Windows.zip
+/OptiLab-Core-*-public-source.zip
+*.pdb
+*.obj
+*.bak
+__pycache__/
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-# REAPER / JSFX backup files
-*.jsfx-bak
-*.bak
-
-# Native build and release products
-/native/build/
-/native/build-*/
-/dist/
-
-# Local analysis and developer state
-/graphify-out/
-/.vs/
-/native/CMakeUserPresets.json
-/native/third_party/foobar2000-sdk/
+# Private review material never belongs in the public repository.
+/maintainer/
+/dist-private/
+/*-private-check.zip
+/*-private-check-SHA256.txt
+/build-jsfx-validation/

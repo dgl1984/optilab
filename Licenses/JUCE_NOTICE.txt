@@ -1,0 +1,8 @@
+JUCE 8.0.12 notice
+
+OptiLab Core is built with JUCE 8.0.12. JUCE is not licensed by Lanes Audio and is not covered by OptiLab Core's LICENSE. JUCE retains the terms offered by its copyright holder.
+
+JUCE 8 licensing information: https://juce.com/legal/juce-8-licence/
+JUCE source repository: https://github.com/juce-framework/JUCE
+
+The OptiLab Core release process must use a JUCE licensing route that permits the intended binary distribution. OptiLab Core's first-party license does not grant rights to JUCE.

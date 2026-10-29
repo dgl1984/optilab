@@ -1,106 +1,15 @@
-# Contributing to OptiLab Core
+# Contributing
 
-Thank you for your interest in contributing. OptiLab Core is a small, focused
-project. Contributions that fit the existing scope are welcome; larger design
-changes should be discussed in an issue first.
+Bug fixes, accessibility improvements, documentation corrections, and host compatibility work are welcome. Discuss changes to the sound, controls, modes, or public API in an issue first.
 
-## What is in scope
+Follow docs/BUILDING.md. Keep real-time processing free of memory allocation and blocking operations. Keep the three-control interface and accessible keyboard behavior consistent across supported formats. Include reproduction steps and your host/format/architecture when reporting a problem.
 
-- Bug fixes for the JSFX, C++ engine, CLAP wrapper, Winamp adapter,
-  foobar2000 adapter, or CI.
-- Improvements to accessibility, documentation, or test coverage.
-- Host compatibility fixes for Winamp, RadioBOSS, StationPlaylist Studio, or
-  other Winamp DSP–compatible broadcast applications.
+Pull requests should describe the user-visible effect and relevant validation.
+Follow the [release procedure](RELEASING.md) before publishing. Automated tests
+supplement required manual host, accessibility and listening acceptance.
 
-## What to discuss first
+Internal processing parameter IDs are stable: retain existing numbered IDs when
+extending the catalogue. Never commit maintainer-only review fixtures, recordings,
+validation logs or `dist-private/`. Public tests must run without private fixtures.
 
-- New controls or new modes.
-- Changes to the native C++ API surface.
-- Changes that affect the sound of the processor in any mode.
-
-Open a GitHub issue and describe the motivation before writing code for any of
-the above.
-
-## Build requirements
-
-- Windows 10 or later.
-- Visual Studio 2022 with the **Desktop development with C++** workload.
-- CMake 3.20 or newer (bundled with Visual Studio 2022).
-
-## Building
-
-Build the 32-bit Winamp DSP (required for plug-in testing):
-
-```powershell
-cmake --preset vs2022-win32 -S native
-cmake --build native/build-winamp --config Release
-ctest --test-dir native/build-winamp -C Release --output-on-failure
-```
-
-Build the 64-bit engine and run all tests:
-
-```powershell
-cmake --preset vs2022-x64 -S native
-cmake --build native/build --config Release
-ctest --test-dir native/build -C Release --output-on-failure
-```
-
-Install the tested local CLAP build:
-
-```powershell
-./scripts/install-clap.ps1
-```
-
-The packaging script produces the release ZIP and SHA-256 file:
-
-```powershell
-./scripts/package-winamp.ps1
-./scripts/package-clap.ps1
-./scripts/package-foobar2000.ps1
-```
-
-## Tests
-
-The project includes four test executables across the x64 and Win32 builds:
-
-- `optilab-core-tests` — Core API and processing behavior.
-- `optilab-winamp-pcm-tests` — PCM integer-conversion paths.
-- `optilab-winamp-smoke-tests` — DLL loading, export presence, and version
-  metadata (Win32 build only).
-- `optilab-clap-smoke-tests`: CLAP ABI, DSP, latency, state, parameter,
-  accessibility, and editor checks (x64 Windows build only).
-
-Run `ctest --output-on-failure` in the relevant build directory. All tests must
-pass before a pull request is merged.
-
-## Code style
-
-- C++17 with `/W4 /permissive-` (MSVC) or `-Wall -Wextra -Wpedantic` (GCC/Clang).
-- No dynamic CRT dependency in the Release Winamp DLL.
-- No memory allocation or lock acquisition in any `process*` method.
-- Match the indentation and naming style of the surrounding code.
-- Keep reusable DSP in `native/core`; format-specific code belongs under
-  `native/plugins/<format>`.
-
-## Documentation
-
-- Update `CHANGELOG.md` under a new version heading for any user-visible change.
-- If your change affects installation, controls, or accessibility, update the
-  relevant `.md` file in the repository root or `native/`.
-- Read `docs/CLAP_ACCESSIBILITY.md` before changing the CLAP editor, its parent
-  window hierarchy, control classes, focus handling, or parameter exposure.
-- Do not remove the emulated REAPER wrapper, Tab-order, or MSAA value assertions
-  from the CLAP smoke test.
-- Keep all user-facing text in plain English. Avoid jargon that a non-audio
-  developer would not understand.
-
-## Pull requests
-
-- Target the `main` branch.
-- Keep pull requests focused. One logical change per PR makes review faster.
-- The CI must pass. The DLL architecture, export, and runtime-dependency checks
-  are enforced automatically.
-
-## Questions
-
-Open a GitHub issue or email `info@lanesaudio.com`.
+See LICENSE and NOTICE for the project's existing terms. Contact info@lanesaudio.com with questions.

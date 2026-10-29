@@ -1,7 +1,10 @@
-﻿// Copyright 2026 Lanes Audio
+// Copyright 2026 Lanes Audio
 // SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
 // Licensed under the Apache License, Version 2.0 with the Commons Clause
 // License Condition v1.0. See LICENSE and NOTICE in the repository root.
+
+
+
 #include "OptiLabCore.h"
 #include "WavFile.h"
 
@@ -15,7 +18,7 @@ namespace {
 void printUsage() {
     std::cerr
         << "Usage:\n"
-        << "  optilab-core-cli input.wav output.wav [--mode podcast|stream|limiter] [--input dB] [--adapt pct]\n";
+        << "  optilab-core-cli input.wav output.wav [--mode stream|podcast|limiter] [--input dB] [--adapt pct]\n";
 }
 
 OptiLabCore::Mode parseMode(const std::string& value) {
@@ -73,9 +76,14 @@ int main(int argc, char** argv) {
         }
 
         OptiLabCore core;
-        core.prepare(static_cast<double>(wav.sampleRate));
         core.setParameters(params);
+        core.prepare(static_cast<double>(wav.sampleRate));
+        const auto inputSamples = wav.samples.size();
+        const auto delaySamples = core.latencySamples() * wav.channels;
+        wav.samples.resize(inputSamples + delaySamples, 0.0f);
         core.processInterleaved(wav.samples.data(), wav.samples.size() / wav.channels, wav.channels);
+        // Export one aligned output frame for each input frame, including the delayed end.
+        wav.samples.erase(wav.samples.begin(), wav.samples.begin() + delaySamples);
         writeWavFile(outputPath, wav);
 
         std::cout << "Processed " << (wav.samples.size() / wav.channels) << " frames at "

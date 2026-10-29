@@ -1,5 +1,10 @@
 // Copyright 2026 Lanes Audio
 // SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
+// Licensed under the Apache License, Version 2.0 with the Commons Clause
+// License Condition v1.0. See LICENSE and NOTICE in the repository root.
+
+
+
 #include <windows.h>
 #include <commctrl.h>
 #include "OptiLabVersion.h"
@@ -47,8 +52,8 @@ BEGIN
     LTEXT         "&Mode:", -1, 17, 24, 55, 10
     COMBOBOX      IDC_OPTILAB_MODE, 80, 21, 153, 55, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
     LTEXT         "&Input drive:", -1, 17, 47, 61, 10
-    COMBOBOX      IDC_OPTILAB_INPUT_DRIVE, 80, 44, 86, 90, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
-    LTEXT         "-12.0 to +18.0 dB", -1, 173, 47, 65, 10
+    CONTROL       "", IDC_OPTILAB_INPUT_DRIVE, TRACKBAR_CLASS, TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 80, 41, 116, 22
+    LTEXT         "+0.0 dB", IDC_OPTILAB_INPUT_DRIVE_VALUE, 203, 47, 36, 10
     LTEXT         "&Auto-adapt:", -1, 17, 70, 61, 10
     CONTROL       "", IDC_OPTILAB_AUTO_ADAPT, TRACKBAR_CLASS, TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 80, 64, 116, 22
     LTEXT         "0%", IDC_OPTILAB_AUTO_ADAPT_VALUE, 203, 70, 32, 10

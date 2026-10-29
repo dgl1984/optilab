@@ -1,3 +1,8 @@
+// Copyright 2026 Lanes Audio
+// SPDX-License-Identifier: LicenseRef-Apache-2.0-with-Commons-Clause-1.0
+// Licensed under the Apache License, Version 2.0 with the Commons Clause
+// License Condition v1.0. See LICENSE and NOTICE in the repository root.
+
 #include <windows.h>
 #include <commctrl.h>
 #include "OptiLabVersion.h"
@@ -45,11 +50,11 @@ BEGIN
     LTEXT           "&Mode:", -1, 17, 23, 54, 10
     COMBOBOX        IDC_MODE, 78, 20, 155, 55, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
     LTEXT           "&Input drive (dB):", -1, 17, 45, 58, 10
-    EDITTEXT        IDC_INPUT_DRIVE, 78, 42, 52, 14, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT           "-12.0 to +18.0", -1, 137, 45, 70, 10
+    CONTROL         "", IDC_INPUT_DRIVE, TRACKBAR_CLASS, TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 78, 38, 116, 22
+    LTEXT           "+0.0 dB", IDC_INPUT_DRIVE_VALUE, 201, 45, 36, 10
     LTEXT           "&Auto-adapt (%):", -1, 17, 66, 58, 10
-    EDITTEXT        IDC_AUTO_ADAPT, 78, 63, 52, 14, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT           "0 to 100", -1, 137, 66, 48, 10
+    CONTROL         "", IDC_AUTO_ADAPT, TRACKBAR_CLASS, TBS_HORZ | TBS_AUTOTICKS | WS_TABSTOP, 78, 59, 116, 22
+    LTEXT           "0%", IDC_AUTO_ADAPT_VALUE, 201, 66, 32, 10
     GROUPBOX        "Meters", -1, 7, 90, 238, 74
     AUTOCHECKBOX    "Show &visual meters", IDC_VISUAL_METERS, 17, 104, 110, 10, WS_TABSTOP
     LTEXT           "Input peak: visual meters off", IDC_INPUT_PEAK, 17, 119, 212, 10
