@@ -39,10 +39,9 @@ cases, with a largest sample difference of 0.00000005960464477539063. The
 42 live-update/state cases and 27 legacy-session cases also passed. Reports identify the
 exact tested source and runtime.
 
-## Remaining release acceptance
+## Release acceptance
 
-Actual REAPER loading, rendering, keyboard/screen-reader behavior and listening
-acceptance are still required before release approval. An isolated REAPER
-bootstrap attempt did not produce host-render evidence and is not counted as a
-pass. Headless DSP comparisons do not replace those checks. See
-[the release procedure](../RELEASING.md).
+The maintainer confirmed REAPER host, accessibility and listening acceptance
+for version 1.5.0 on October 29, 2026. This acceptance is separate from the
+headless DSP regression results above. Future releases still require the
+checks in [the release procedure](../RELEASING.md).

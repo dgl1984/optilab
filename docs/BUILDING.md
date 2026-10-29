@@ -11,7 +11,7 @@ Run `BUILD_WINDOWS.bat` from the repository root. Python is not required. The sc
 
 The full transcript is written to `BUILD_WINDOWS_LOG.txt`; prior transcripts are retained under `validation-logs`. These logs are generated locally and are intentionally excluded from the public-source archive. Nothing is installed automatically. Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\BUILD_WINDOWS.ps1 -Incremental` to reuse build objects; default builds start clean.
 
-Current product sources, build files, and the public regression tests are included. Private fixtures and release-review-only audits are not distributed. No CI workflow is required to reproduce the public test layer. The maintainer/review tree can add deeper tests on top of the same CMake configuration; its CP13 automated results passed on 2026-10-25, with manual acceptance still pending.
+Current product sources, build files, and the public regression tests are included. Private fixtures and release-review-only audits are not distributed. No CI workflow is required to reproduce the public test layer. The maintainer/review tree can add deeper tests on top of the same CMake configuration; its CP13 automated results passed on 2026-10-25, with REAPER host, accessibility and listening acceptance subsequently confirmed by the maintainer on October 29, 2026.
 
 The WAV command-line tool is built in both architectures by the batch entry point. It can also be built separately with `cmake --build build-windows-x64 --config Release --target optilab-core-cli` after configuration. It exposes the same three controls; run it without arguments for usage.
 

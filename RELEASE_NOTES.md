@@ -55,7 +55,7 @@ The 1.5 native release targets:
 - 32-bit Winamp-compatible DSP
 - 32/64-bit foobar2000 component package
 
-The JSFX companion in `Effects/optilab_core.jsfx` is synchronized to the current Stream coordinator and endpoint states, with generated-signal processing, coordinator, latency, automation and state regression coverage against the native reference. The Windows build validates it before packaging. Actual REAPER host, accessibility and listening acceptance remain pending; see [JSFX notes](docs/JSFX.md).
+The JSFX companion in `Effects/optilab_core.jsfx` is synchronized to the current Stream coordinator and endpoint states, with generated-signal processing, coordinator, latency, automation and state regression coverage against the native reference. The Windows build validates it before packaging. REAPER host, accessibility and listening acceptance are complete, as confirmed by the maintainer; see [JSFX notes](docs/JSFX.md).
 
 
 
