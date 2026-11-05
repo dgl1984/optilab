@@ -1,5 +1,8 @@
 # Contributing
 
+For a macOS contribution, start with the [Mac porting guide](docs/MACOS_PORTING.md).
+It maps the build changes and reusable work from Victor Tsaran's ports.
+
 Bug fixes, accessibility improvements, documentation corrections, and host compatibility work are welcome. Discuss changes to the sound, controls, modes, or public API in an issue first.
 
 Follow docs/BUILDING.md. Keep real-time processing free of memory allocation and blocking operations. Keep the three-control interface and accessible keyboard behavior consistent across supported formats. Include reproduction steps and your host/format/architecture when reporting a problem.
