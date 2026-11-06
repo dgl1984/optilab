@@ -1,4 +1,4 @@
-OptiLab Core 1.5.0 — Third-party notices
+OptiLab Core 1.6.0 — Third-party notices
 ========================================
 
 OptiLab Core's LICENSE covers Lanes Audio first-party material where no more specific license is stated. Third-party frameworks, SDKs, and wrapper support retain their own terms.

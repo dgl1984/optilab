@@ -592,6 +592,29 @@ void OptiLabCoreEngine::processDelivery(
     deliverySustainedSmoothed += deliverySustainedSmoothCoeff *
         (deliverySustainedTarget - deliverySustainedSmoothed);
 
+#if defined(_M_X64) || defined(__x86_64__)
+    // Accumulate independent phases together, following the coefficient layout.
+    // Each phase retains the original ascending tap order and arithmetic.
+    std::array<double, deliveryDetectorPhases> sumsL{};
+    std::array<double, deliveryDetectorPhases> sumsR{};
+    for (int tap = 0; tap < deliveryDetectorTaps; ++tap) {
+        const double historyL = deliveryHistL[static_cast<std::size_t>(tap)];
+        const double historyR = deliveryHistR[static_cast<std::size_t>(tap)];
+        for (int phase = 0; phase < deliveryDetectorPhases; ++phase) {
+            const auto index = static_cast<std::size_t>(phase);
+            const double coefficient = deliveryCoeff[static_cast<std::size_t>(
+                tap * deliveryDetectorPhases + phase)];
+            sumsL[index] += historyL * coefficient;
+            sumsR[index] += historyR * coefficient;
+        }
+    }
+    double peak = absmax2(left, right);
+    for (int phase = 0; phase < deliveryDetectorPhases; ++phase) {
+        const auto index = static_cast<std::size_t>(phase);
+        peak = std::max(peak, absmax2(sumsL[index], sumsR[index]));
+    }
+#else
+    // The phase-major loop benchmarks faster on Win32.
     double peak = absmax2(left, right);
     for (int phase = 0; phase < deliveryDetectorPhases; ++phase) {
         double sumL = 0.0;
@@ -604,6 +627,7 @@ void OptiLabCoreEngine::processDelivery(
         }
         peak = std::max(peak, absmax2(sumL, sumR));
     }
+#endif
 
     const double required = peak > deliveryTarget
         ? deliveryTarget / std::max(peak, 1.0e-12) : 1.0;

@@ -7,7 +7,7 @@ Automated checks prepare a candidate; they do not approve publication.
 Review README.md, CHANGELOG.md, RELEASE_NOTES.md and docs/USER_GUIDE.md together.
 Confirm supported formats, install/upgrade guidance and version strings agree.
 The version comes from native/CMakeLists.txt; generated headers and packages must
-match it. Use a semantic tag such as `v1.5.0` and title `OptiLab Core 1.5.0` only
+match it. Use a semantic tag such as `v1.6.0` and title `OptiLab Core 1.6.0` only
 for the approved source.
 
 Review the source diff and preserve the three host controls/state IDs, fixed mode

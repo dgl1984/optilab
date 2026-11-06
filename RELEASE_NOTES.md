@@ -1,4 +1,6 @@
-# OptiLab Core 1.5.0
+# OptiLab Core 1.6.0
+
+Version 1.6.0 improves processing performance in 64-bit VST3, CLAP and foobar2000. Podcast Leveler now uses Density's sharpest crossovers from 90% Auto-Adapt in every format. Controls and latency are unchanged.
 
 Version 1.5.0 rebuilds Core around the current engine and shared delivery limiter. It adds VST3 and updates the classic playback wrappers while keeping the same three controls: **Mode**, **Input Drive**, and **Auto-Adapt**.
 
@@ -46,14 +48,14 @@ The public source contains what is required to build and maintain Core. Release 
 
 ## Formats
 
-The 1.5 native release targets:
+The 1.6 native release targets:
 
 - 64-bit Windows VST3
 - 64-bit Windows CLAP
 - 32-bit Winamp-compatible DSP
 - 32/64-bit foobar2000 component package
 
-The JSFX companion in `Effects/optilab_core.jsfx` is synchronized to the current Stream coordinator and endpoint states, with generated-signal processing, coordinator, latency, automation and state regression coverage against the native reference. The Windows build validates it before packaging. REAPER host, accessibility and listening acceptance are complete, as confirmed by the maintainer; see [JSFX notes](docs/JSFX.md).
+The JSFX companion in `Effects/optilab_core.jsfx` is synchronized to the current Stream coordinator and endpoint states, with generated-signal processing, coordinator, latency, automation and state regression coverage against the native reference. The Windows build validates it before packaging. See [JSFX notes](docs/JSFX.md).
 
 See the [CLAP upgrade note](CHANGELOG.md#clap-upgrade-note) before replacing a pre-1.5 plugin.
 

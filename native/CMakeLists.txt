@@ -4,7 +4,7 @@ if (POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
 
-project(optilab_core VERSION 1.5.0 LANGUAGES CXX)
+project(optilab_core VERSION 1.6.0 LANGUAGES CXX)
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)

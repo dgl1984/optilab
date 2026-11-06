@@ -25,7 +25,7 @@ The native packages are for Windows. VST3 and CLAP are 64-bit; the Winamp-compat
 - **VST3:** copy the complete `OptiLab Core.vst3` bundle into your host's VST3 location, normally `C:\Program Files\Common Files\VST3`, then rescan. Keep the bundle together.
 - **CLAP:** copy `OptiLab Core.clap` into your host's CLAP location, such as `%LOCALAPPDATA%\Programs\Common\CLAP`, then rescan. If you are replacing the pre-1.5 CLAP, read the [upgrade note](../CHANGELOG.md#clap-upgrade-note) first.
 - **Winamp-compatible DSP:** close the host, copy `dsp_optilab_core.dll` into its DSP plugin folder, restart it, and select OptiLab Core in its DSP settings. The folder depends on the host.
-- **foobar2000:** install `foo_optilab_core-1.5.0.fb2k-component` through **Preferences > Components**, restart when prompted, then add OptiLab Core under **Preferences > Playback > DSP Manager**. Do not unpack the component and copy a DLL manually.
+- **foobar2000:** install `foo_optilab_core-1.6.0.fb2k-component` through **Preferences > Components**, restart when prompted, then add OptiLab Core under **Preferences > Playback > DSP Manager**. Do not unpack the component and copy a DLL manually.
 - **JSFX:** in REAPER, choose **Options > Show REAPER resource path in explorer/finder**, copy `Effects/optilab_core.jsfx` into that directory's `Effects` folder, then find Core in the FX browser. See the [JSFX notes](JSFX.md) for saved-session differences.
 
 ### Your first listen
@@ -174,7 +174,7 @@ If you deliberately want to drive Core harder, another option is to keep Auto-Ad
 
 Podcast has three starting points behind the continuous slider: 0%, 50%, and 100%. The lower half develops from fast recovery to a slower, fuller sound. Above 20%, the automatic level control begins taking on more of the work, reaching its middle setting at 50%.
 
-Above 50%, compression, tone, and the level feeding the final stages develop toward the stronger upper voicing. At 70%, Core changes how it divides the audio into bands; at 90%, it brings in an additional high-frequency filter. Those changes reverse when you move back down. They are automatic parts of this Mode, not extra switches you need to find.
+Above 50%, compression, tone, and the level feeding the final stages develop toward the stronger upper voicing. At 70%, Core changes how it divides the audio into bands; at 90%, it switches to the sharpest Density crossovers and brings in an additional high-frequency filter. Those changes reverse when you move back down. They are automatic parts of this Mode, not extra switches you need to find.
 
 They can change the sound audibly, so choose a setting by listening rather than treating Auto-Adapt as a volume fader.
 

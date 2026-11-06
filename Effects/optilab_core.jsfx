@@ -1,9 +1,11 @@
 // @description OptiLab Core
-// @version 1.5.0-cp13
+// @version 1.6.0
 // @author LanesAudio
 // @about
 //   OptiLab Core is a three-control broadcast and mastering processor.
 // @changelog
+//   v1.6.0
+//   - Podcast uses the sharpest Density crossovers from 90% Auto-Adapt.
 //   v1.5.0
 //   - Updated Stream polish calibration and high-frequency control.
 //   - Matches the CP13 native coordinator, processing, latency and state behavior.
@@ -1708,7 +1710,7 @@ function core_compute_parameters(mode adapt) local(t foundation prep clean push 
    core_values[i]=v;i+=1;
   );
   core_values[8]=adapt<=50 ? 10+40*smoothstep01(clamp((adapt-20)/30,0,1)) : 50;
-  core_values[44]=adapt<70 ? 2 : 3;
+  core_values[44]=adapt<70 ? 2 : (adapt<90 ? 3 : 4);
   core_values[79]=adapt<90 ? 0 : 1;
   adapt>50 ? (
    core_values[45]=floor(100+50*smoothstep01(clamp((adapt-50)/20,0,1))+0.5);
@@ -2341,7 +2343,7 @@ core_podcast_high=7000336;
 7000377[0]=2.54;
 7000378[0]=3.0480000000000005;
 7000379[0]=25;
-7000380[0]=3;
+7000380[0]=4;
 7000381[0]=150;
 7000382[0]=0;
 7000383[0]=0.96000000000000119;

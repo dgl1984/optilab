@@ -479,7 +479,7 @@ static void applyPodcastUpperState(OptiLabCoreEngine::ParameterValues& m) {
     m["p042"] = 2.54;
     m["p043"] = 3.0480000000000005;
     m["p044"] = 25;
-    m["c22"] = 3;
+    m["c22"] = 4;
     m["c10"] = 150;
     m["c31"] = 0;
     m["p048"] = 0.96000000000000119;
@@ -850,7 +850,7 @@ void OptiLabCore::interpolateInto(Values& dst,const Values& lo,const Values& hi,
                 ? (weight<0.72?lv:hv) : lv+(hv-lv)*weight;
         }
         dst["p009"]=adapt<=50.0?10.0+40.0*smoothstep((adapt-20.0)/30.0):50.0;
-        dst["c22"]=adapt<70.0?2.0:3.0;
+        dst["c22"]=adapt<70.0?2.0:(adapt<90.0?3.0:4.0);
         dst["p080"]=adapt<90.0?0.0:1.0;
         if(adapt>50.0) {
             dst["c10"]=std::floor(100.0+50.0*smoothstep((adapt-50.0)/20.0)+0.5);

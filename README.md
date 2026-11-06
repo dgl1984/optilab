@@ -12,11 +12,11 @@ OptiLab Core is a free, accessible broadcast and mastering processor from Lanes 
 
 [**Published downloads**](https://github.com/dgl1984/optilab/releases) · [**Read the user guide**](docs/USER_GUIDE.md)
 
-## Version 1.5.0
+## Version 1.6.0
 
-Download **1.5.0** as one Windows ZIP containing all supported formats. The complete public source is included when you clone this repository. See the [release notes](RELEASE_NOTES.md), [change history](CHANGELOG.md), and [user guide](docs/USER_GUIDE.md).
+Windows downloads come as one ZIP containing all supported formats. The complete public source is included when you clone this repository. See the [release notes](RELEASE_NOTES.md), [change history](CHANGELOG.md), and [user guide](docs/USER_GUIDE.md).
 
-Version 1.5 rebuilds Core around the current processing engine while keeping the same three-control workflow. The idea is to make each of those three choices count.
+Version 1.6 improves processing performance in the 64-bit VST3, CLAP and foobar2000 versions. Podcast Leveler now uses sharper Density crossovers from 90% Auto-Adapt. The three-control workflow stays the same.
 
 **Stream polish** is now the first Mode in the native formats and the fresh-instance default in every format. JSFX preserves its legacy Mode numbering for existing sessions. **Podcast Leveler** has developed into a distinctly flatter, more controlled talk-station-style voicing. **Smooth Limiter** now has a clearer progression from gentle mastering-style control toward its strongest event-limiting endpoint.
 
@@ -49,7 +49,7 @@ For practical guidance on the controls, the three voicings, and how Auto-Adapt c
 - **VST3:** copy the complete `OptiLab Core.vst3` bundle to your VST3 folder and rescan.
 - **CLAP:** copy `OptiLab Core.clap` to your CLAP folder and rescan. Read the [CLAP upgrade note](CHANGELOG.md#clap-upgrade-note) before replacing the 1.4 CLAP plugin.
 - **Winamp-compatible hosts:** copy `dsp_optilab_core.dll` to the host's DSP plugin folder.
-- **foobar2000:** install `foo_optilab_core-1.5.0.fb2k-component` through **Preferences > Components**. The installer selects the appropriate architecture; do not copy the archive or a loose DLL into `user-components`.
+- **foobar2000:** install `foo_optilab_core-1.6.0.fb2k-component` through **Preferences > Components**. The installer selects the appropriate architecture; do not copy the archive or a loose DLL into `user-components`.
 
 - **JSFX:** copy `Effects/optilab_core.jsfx` to your REAPER resource directory's `Effects` folder, then insert it as a JS effect. See [JSFX notes and validation](docs/JSFX.md).
 

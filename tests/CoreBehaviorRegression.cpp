@@ -192,6 +192,8 @@ void testPodcastSwitchBoundaries() {
         p.autoAdaptPct=adapt;core.setParameters(p);
         const auto v=core.producer_.effectiveParameterValues();
         require(v.at("p080")==double(adapt<90?0:1),"Podcast top-filter switch is stale");
+        require(core.producer_.effectiveCoreValues().at("c22")==double(adapt<70?2:(adapt<90?3:4)),
+                "Podcast crossover must use LR8 at 90% and above in both directions");
         require(v.at("p009")==10 || adapt>20,"Podcast AGC amount rises before its authored stage");
         require(core.latencySamples()==301,"Podcast automation changed reported latency");
         for(int i=0;i<1024;++i)requireFinite(core.processSample(float(.2*std::sin(i*.13)),-.1f),"Podcast switch emitted nonfinite audio");

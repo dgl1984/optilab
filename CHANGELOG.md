@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.0
+
+- Improved processing performance in 64-bit VST3, CLAP and foobar2000 without changing controls or latency.
+- Podcast Leveler uses Density's sharpest crossovers from 90% Auto-Adapt for more tightly separated speech bands, in every format.
+
 ## 1.5.0 — changes since 1.4.0
 
 - Rebuilt Core around the current processing engine while keeping Mode, Input Drive and Auto-Adapt as the three controls. Stream is the fresh default, with a useful sound at 0% and more intensity as Auto-Adapt rises. Stream has no high-end roll-off filter.
