@@ -275,6 +275,13 @@ if (BUILD_TESTING)
         add_test(NAME winamp-wrapper COMMAND optilab-winamp-wrapper-test)
     endif()
 
+    if (APPLE AND TARGET OptiLabCoreJuce_CLAP)
+        add_executable(optilab-mac-clap-smoke ../tests/MacClapSmokeTest.cpp)
+        target_include_directories(optilab-mac-clap-smoke PRIVATE "${CLAP_JUCE_EXTENSIONS_DIR}/clap-libs/clap/include")
+        add_dependencies(optilab-mac-clap-smoke OptiLabCoreJuce_CLAP)
+        add_test(NAME mac-clap-binary COMMAND optilab-mac-clap-smoke "$<TARGET_BUNDLE_DIR:OptiLabCoreJuce_CLAP>")
+    endif()
+
     if (TARGET OptiLabCoreJuce)
         add_executable(optilab-juce-wrapper-test ../tests/JuceWrapperTest.cpp)
         target_include_directories(optilab-juce-wrapper-test PRIVATE ${OPTILAB_JUCE_DIR}

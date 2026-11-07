@@ -30,9 +30,9 @@ PLUGIN_BUNDLES = (
     (MACOS_CLAP_NAME, "/Library/Audio/Plug-Ins/CLAP", "CLAP plug-in"),
     (MACOS_AU_NAME, "/Library/Audio/Plug-Ins/Components", "Audio Unit plug-in (Logic, GarageBand)"),
 )
-DISK_IMAGE_ITEMS = ("docs", "licenses", "LICENSE", "NOTICE", "Effects")
+DISK_IMAGE_ITEMS = ("docs", "licenses", "LICENSE", "NOTICE", "Effects", "CHANGELOG.md")
 INSTALLER_NAME = "Install OptiLab Core.pkg"
-IDENTIFIER = "com.lanesaudio.optilabcore-eq"
+IDENTIFIER = "com.lanesaudio.optilabcore"
 MINIMUM_MACOS = "12.0"
 
 # Trigger macOS AudioComponentRegistrar rescan so hosts discover the new AU immediately.

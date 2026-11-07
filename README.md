@@ -22,10 +22,11 @@ Version 1.6 improves processing performance in the 64-bit VST3, CLAP and foobar2
 
 ## Formats
 
-| Format | Windows architecture |
+| Format | Availability |
 |---|---|
-| VST3 | 64-bit |
-| CLAP | 64-bit |
+| VST3 | Windows 64-bit; macOS Apple Silicon and Intel |
+| CLAP | Windows 64-bit; macOS Apple Silicon and Intel |
+| Audio Unit | macOS Apple Silicon and Intel |
 | Winamp-compatible DSP | 32-bit |
 | foobar2000 | 32-bit and 64-bit in one component package |
 | JSFX | REAPER effect; source included in `Effects` |

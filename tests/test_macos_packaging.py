@@ -23,7 +23,7 @@ class PackagingTests(unittest.TestCase):
                 binary.write_bytes(b"test")
             for name in ("docs", "licenses", "Effects"):
                 (root / name).mkdir()
-            for name in ("LICENSE", "NOTICE"):
+            for name in ("LICENSE", "NOTICE", "CHANGELOG.md"):
                 (root / name).write_text("test")
             validate_public_tree(root)
             (root / "docs/accidental.dll").write_bytes(b"test")

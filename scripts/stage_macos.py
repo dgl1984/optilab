@@ -9,7 +9,7 @@ MACOS_CLAP_NAME = "OptiLab Core.clap"
 NAMES = (MACOS_AU_NAME, MACOS_VST3_NAME, MACOS_CLAP_NAME)
 
 def validate_public_tree(root):
-    expected = set(NAMES) | {"docs", "licenses", "LICENSE", "NOTICE", "Effects"}
+    expected = set(NAMES) | {"docs", "licenses", "LICENSE", "NOTICE", "Effects", "CHANGELOG.md"}
     if {p.name for p in root.iterdir()} != expected:
         raise ValueError("Unexpected staged package contents")
     for name in NAMES:
@@ -37,10 +37,10 @@ def main():
     shutil.copy2(juce / "modules/juce_audio_processors_headless/format_types/VST3_SDK/LICENSE.txt",
                  stage / "licenses/VST3_SDK_LICENSE.txt")
     (stage / "docs").mkdir()
-    for name in ("USER_GUIDE.md", "MACOS.md"):
+    for name in ("USER_GUIDE.md", "MACOS.md", "JSFX.md", "CLAP_ACCESSIBILITY.md"):
         shutil.copy2(source / "docs" / name, stage / "docs" / name)
     shutil.copytree(source / "Effects", stage / "Effects")
-    for name in ("LICENSE", "NOTICE"):
+    for name in ("LICENSE", "NOTICE", "CHANGELOG.md"):
         shutil.copy2(source / name, stage / name)
     for name in NAMES:
         resources = stage / name / "Contents/Resources"
