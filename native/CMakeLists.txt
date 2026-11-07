@@ -10,7 +10,7 @@ if (CMAKE_HOST_APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS version")
 endif()
 
-project(optilab_core VERSION 1.6.0 LANGUAGES CXX)
+project(optilab_core VERSION 1.6.0 LANGUAGES C CXX)
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
