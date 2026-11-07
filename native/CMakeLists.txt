@@ -4,6 +4,12 @@ if (POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
 
+# Match the universal macOS delivery used by Tone Trace and SpaceTrace.
+if (CMAKE_HOST_APPLE)
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS version")
+endif()
+
 project(optilab_core VERSION 1.6.0 LANGUAGES CXX)
 include(CTest)
 
@@ -59,7 +65,7 @@ add_library(optilab-winamp-pcm STATIC
 )
 target_include_directories(optilab-winamp-pcm PUBLIC ${OPTILAB_WINAMP_DIR})
 
-if (OPTILAB_BUILD_JUCE_PLUGINS AND WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+if (OPTILAB_BUILD_JUCE_PLUGINS AND (WIN32 OR APPLE) AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     if (NOT EXISTS "${JUCE_DIR}/CMakeLists.txt")
         message(FATAL_ERROR "JUCE 8.0.12 was not found at ${JUCE_DIR}. Run scripts/fetch-juce-clap-deps.ps1 first.")
     endif()
@@ -71,12 +77,17 @@ if (OPTILAB_BUILD_JUCE_PLUGINS AND WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(CLAP_JUCE_EXTENSIONS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     add_subdirectory("${CLAP_JUCE_EXTENSIONS_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/clap-juce-extensions" EXCLUDE_FROM_ALL)
 
+    set(OPTILAB_PLUGIN_FORMATS VST3)
+    if (APPLE)
+        list(APPEND OPTILAB_PLUGIN_FORMATS AU)
+    endif()
+
     juce_add_plugin(OptiLabCoreJuce
         COMPANY_NAME "Lanes Audio"
         BUNDLE_ID "com.lanesaudio.optilabcore"
         PLUGIN_MANUFACTURER_CODE LnAu
         PLUGIN_CODE OpCr
-        FORMATS VST3
+        FORMATS ${OPTILAB_PLUGIN_FORMATS}
         PRODUCT_NAME "OptiLab Core"
         COMPANY_WEBSITE "https://lanesaudio.com"
         COMPANY_EMAIL "info@lanesaudio.com"

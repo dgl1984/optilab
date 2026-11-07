@@ -20,7 +20,7 @@ This guide starts with getting Core into your host, then walks through the inter
 
 ### Install the format your host uses
 
-The native packages are for Windows. VST3 and CLAP are 64-bit; the Winamp-compatible DSP is 32-bit. The foobar2000 component includes both 32-bit and 64-bit versions. JSFX runs inside REAPER.
+On a Mac, use the [Mac installer](MACOS.md) for AU, VST3 or CLAP. The following copy instructions are for Windows. VST3 and CLAP are 64-bit; the Winamp-compatible DSP is 32-bit. The foobar2000 component includes both 32-bit and 64-bit versions. JSFX runs inside REAPER.
 
 - **VST3:** copy the complete `OptiLab Core.vst3` bundle into your host's VST3 location, normally `C:\Program Files\Common Files\VST3`, then rescan. Keep the bundle together.
 - **CLAP:** copy `OptiLab Core.clap` into your host's CLAP location, such as `%LOCALAPPDATA%\Programs\Common\CLAP`, then rescan. If you are replacing the pre-1.5 CLAP, read the [upgrade note](../CHANGELOG.md#clap-upgrade-note) first.

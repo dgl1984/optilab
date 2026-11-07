@@ -1,0 +1,96 @@
+name: macOS Universal
+
+on:
+  push:
+    branches: [main, macos-port]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify packaging tests
+        run: python3 -m unittest discover -s tests -p 'test_macos_packaging.py'
+      - name: Build universal plug-ins, test and package
+        run: bash BUILD_MACOS.sh
+      - name: Install packaged plug-ins and validate Audio Unit
+        run: |
+          set -euo pipefail
+          hdiutil attach build-macos/release/OptiLab-Core-*-macOS-Universal.dmg -mountpoint "$RUNNER_TEMP/optilab" -nobrowse
+          sudo installer -pkg "$RUNNER_TEMP/optilab/Install OptiLab Core.pkg" -target /
+          hdiutil detach "$RUNNER_TEMP/optilab"
+          codesign --verify --strict --deep '/Library/Audio/Plug-Ins/Components/OptiLab Core.component'
+          killall -9 AudioComponentRegistrar || true
+          auval -v aufx OpCr LnAu 2>&1 | tee build-macos/auval.log
+      - name: Validate installed VST3
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip -o "$RUNNER_TEMP/pluginval.zip"
+          echo '3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f  pluginval.zip' > "$RUNNER_TEMP/pluginval.sha256"
+          (cd "$RUNNER_TEMP" && shasum -a 256 -c pluginval.sha256)
+          unzip -q "$RUNNER_TEMP/pluginval.zip" -d "$RUNNER_TEMP/pluginval"
+          "$RUNNER_TEMP/pluginval/pluginval.app/Contents/MacOS/pluginval" --strictness-level 5 --validate '/Library/Audio/Plug-Ins/VST3/OptiLab Core.vst3' 2>&1 | tee build-macos/pluginval.log
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OptiLab-Core-macOS-Universal
+          path: build-macos/release/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: macOS-validation-logs
+          path: |
+            BUILD_MACOS_LOG.txt
+            build-macos/*.log
+            build-macos/Testing/Temporary/LastTest.log
+
+  publish:
+    needs: build
+    if: github.event_name == 'release' || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: optilab-macos-release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Attach Mac installer to the matching release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -nE 's/^project\(optilab_core VERSION ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p' native/CMakeLists.txt)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="v$version"
+          gh api --paginate "repos/$GH_REPO/releases" --jq '.[].tag_name' > releases.txt
+          if ! grep -Fxq "$tag" releases.txt; then
+            echo "No release $tag yet; installer remains available as a CI artifact." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          name="OptiLab-Core-${version}-macOS-Universal.dmg"
+          gh release view "$tag" --json assets --jq '.assets[].name' > assets.txt
+          if grep -Fxq "$name" assets.txt; then
+            echo "Mac installer already published; leaving the asset unchanged." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh run download "$GITHUB_RUN_ID" --name OptiLab-Core-macOS-Universal --dir package
+          (cd package && sha256sum --check SHA256SUMS.txt)
+          gh release upload "$tag" "package/$name"
+          gh release download "$tag" --pattern "$name" --dir published
+          cmp "package/$name" "published/$name"
+          echo "Mac download: https://github.com/$GH_REPO/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"

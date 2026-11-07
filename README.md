@@ -14,7 +14,7 @@ OptiLab Core is a free, accessible broadcast and mastering processor from Lanes 
 
 ## Version 1.6.0
 
-Windows downloads come as one ZIP containing all supported formats. The complete public source is included when you clone this repository. See the [release notes](RELEASE_NOTES.md), [change history](CHANGELOG.md), and [user guide](docs/USER_GUIDE.md).
+Windows downloads come as one ZIP containing all Windows formats. The [Mac installer](docs/MACOS.md) provides universal AU, VST3 and CLAP plug-ins for Apple Silicon and Intel Macs. The complete public source is included when you clone this repository. See the [release notes](RELEASE_NOTES.md), [change history](CHANGELOG.md), and [user guide](docs/USER_GUIDE.md).
 
 Version 1.6 improves processing performance in the 64-bit VST3, CLAP and foobar2000 versions. Podcast Leveler now uses sharper Density crossovers from 90% Auto-Adapt. The three-control workflow stays the same.
 

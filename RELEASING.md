@@ -97,7 +97,7 @@ Automated tests cannot replace these gates.
 Review final documentation and source, commit only the approved public tree and
 tag the source used to build the tested files. Do not commit the maintainer overlay.
 
-Publish one combined Windows ZIP containing all formats, documentation, licenses and SHA256SUMS.txt. Commit the complete public source at the repository root and tag that commit so cloning and GitHub source archives include it. Do not attach a separate source ZIP or individual plug-ins. Release uploads are manual; the workflow is for manually requested build validation only.
+Publish one combined Windows ZIP containing all formats, documentation, licenses and SHA256SUMS.txt. Commit the complete public source at the repository root and tag that commit so cloning and GitHub source archives include it. Do not attach a separate source ZIP or individual plug-ins. Windows release publication remains manual. The macOS workflow builds and validates universal AU/VST3/CLAP plug-ins and automatically attaches the Mac DMG to the matching published version. It runs on main pushes, published releases and manual dispatch, and never replaces an existing Mac asset.
 
 After authorized publication, download each uploaded file and compare hashes with
 the approved local copies. Confirm download/manual links and tag/source identity.
